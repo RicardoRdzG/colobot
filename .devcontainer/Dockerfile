@@ -7,6 +7,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       build-essential cmake git wget curl ca-certificates pkg-config \
         libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsndfile1-dev libvorbis-dev libogg-dev libpng-dev libglew-dev libopenal-dev libphysfs-dev gettext po4a vorbis-tools libglm-dev libuv1-dev \
+        xvfb mesa-utils libgles2-mesa-dev libgl1-mesa-dri \
       gdb lldb ninja-build python3 python3-pip pipx python3-venv && \
     rm -rf /var/lib/apt/lists/*
 
