@@ -5,7 +5,8 @@
 # Usage: bash .devcontainer/test-headless.sh <path-to-colobot-binary> <datadir>
 #
 # Requirements (included in devcontainer image):
-#   xvfb, libgl1-mesa-dri (llvmpipe), imagemagick (import -window root)
+#   xvfb, libgl1-mesa-dri (llvmpipe)
+# Screenshots are captured via GL framebuffer readback — no imagemagick needed.
 set -euo pipefail
 
 COLOBOT=${1:-./build/colobot}
