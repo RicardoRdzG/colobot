@@ -1,6 +1,6 @@
 # Agent Command Server — Spec
 
-**Status:** DRAFT v0.9 — raw mouse input (move, drag, button) + window geometry  
+**Status:** DRAFT v0.12 — full exercise suite (ch2–7); CBot public-class fix; open_studio robot_filter + anti-pollution  
 **Approach:** spec-first; analyst updates this doc as prototype clarifies unknowns  
 **Agents:**
 - `analyst` — owns this spec; refines it as prototype runs
@@ -730,8 +730,18 @@ differ. If it is identical to the English text, the translated file is missing.
 
 **Important:** `StudioCompile` and `StudioRun` are disabled (`409`) when the
 selected program has `runnable = false`. This is set for the pre-loaded *soluce*
-(solution) program. Always add a new program slot with `ButtonAddProgram` before
-opening the studio — new programs are always `runnable = true`.
+(solution) program slot from the level data.
+
+**Robot/slot selection strategy (see `open_studio()` in §7):**
+- Before adding a new slot via `ButtonAddProgram`, scan existing slots with
+  `GET /program?slot=N` for a source match (runnable preferred, non-runnable accepted).
+  Pre-loaded soluce slots have `runnable=false` but carry the correct source — reuse
+  them rather than adding a duplicate.
+- Never call `ButtonAddProgram` when any runnable slot already exists on the robot
+  (anti-pollution). Overwrite its source via Studio instead.
+- `ListStudioPrograms` (inside Studio) is **not** for switching slots — its click
+  handler opens the SatCom help viewer. Use `select("ListPrograms", index=N)` on
+  the HUD *before* opening Studio to set the active slot.
 
 ---
 
@@ -771,12 +781,37 @@ opening the studio — new programs are always `runnable = true`.
 | `widget_ids()` | list of all current widget IDs |
 | `find_object(type_name)` | first visible object of given type |
 | `select_programmable_robot()` | iterates shortcut buttons (evt:1501–1549) until `ButtonOpenStudio` appears |
-| `open_studio()` | clicks `ButtonAddProgram` (new runnable slot) then `ButtonOpenStudio`; waits for `Studio` screen |
+| `dismiss_satcom(delay=0.3)` | clicks `SatComClose` if visible; returns True if dismissed |
+| `open_studio(expected_source=None, robot_filter=None)` | single-pass scan of shortcut buttons; prefers robots with a matching source slot (runnable first, non-runnable accepted); falls back to first robot with ButtonAddProgram; anti-pollution: reuses existing runnable slot instead of adding new one; `robot_filter` lets callers select by content predicate instead of source string |
 | `compile(source, slot=-1)` | `set_program` with `compile=True`; returns error dict or `None` |
 | `run_program()` | click `ButtonRunProgram` on selected robot's HUD |
 | `console(command)` | opens console (`Backquote`), types command, sends `Return` |
 | `save_snapshot(name)` | capture and save baseline PNG |
 | `assert_snapshot(name, tolerance)` | pixel-diff against baseline; saves `.actual.png` on failure |
+
+### open_studio() robot selection detail
+
+`open_studio` iterates shortcut buttons `evt:1501`–`evt:1549` in a **single pass**:
+
+1. For each robot, check for `ButtonOpenStudio` (dismiss SatCom if it opens automatically).
+2. If `robot_filter` is given: call `robot_filter(client)` — accept if True, skip otherwise.  
+   Used by prepare hooks that target a robot currently running a specific script.
+3. If `expected_source` is given: scan all slots with `GET /program?slot=N`.  
+   - Record first **runnable** source-matching slot (`reuse_slot` — best case).  
+   - Accept first **non-runnable** source-matching slot too (level data pre-loads the soluce as non-runnable).  
+   - Record first **any runnable** slot (`any_runnable` — anti-pollution fallback).  
+   - On first source match: stop scanning (this is the target robot).  
+   - No match: record robot as `fallback` (stores `any_runnable` for anti-pollution).
+4. After scan: select the best target, re-click to confirm, then:
+   - If `reuse_slot` found → `select("ListPrograms", index=reuse_slot)`.
+   - Else if fallback has `any_runnable` → `select("ListPrograms", index=any_runnable)` (reuse, don't add).
+   - Else → `ButtonAddProgram` (only when truly no usable slot exists).
+5. Click `ButtonOpenStudio`, wait for `Studio` screen.
+
+**Why this matters:** Without source matching, the Astronaut (Me) can accumulate
+program slots from prior levels, appear at a lower `evt:N` than the target robot, and
+receive `ButtonAddProgram` incorrectly. The source-match scan ensures the correct robot
+is always selected regardless of shortcut button ordering.
 
 ---
 
@@ -788,20 +823,31 @@ Tests live in `tests/agent/` and run with **pytest**.
 
 ```
 tests/agent/
-├── conftest.py              # game_server + client fixtures; navigate_to_main_menu()
-├── agent_client.py          # HTTP wrapper
-├── record.py                # recording tool (see §10)
-├── test_01_health.py        # /health endpoint
-├── test_02_state.py         # /state screen detection + widget tree
-├── test_03_screenshot.py    # GL and OS screenshot paths; visual regression
-├── test_04_navigation.py    # click, type, screen transitions
-├── test_05_languages.py     # language list in SetupGame
-├── test_06_ingame.py        # studio, cheats (showsoluce, winmission)
-├── test_07_win_no_cheats.py # program the robot to win without cheats
-├── test_08_program_api.py   # /launch, rich /objects, /program and /diagnostics
-├── test_09_chapter_one.py   # parametrized: all 7 Exercises chapter-1 levels completed
-└── snapshots/               # baseline PNGs for visual regression
+├── conftest.py                 # game_server + client fixtures; navigate_to_main_menu()
+├── agent_client.py             # HTTP wrapper + AgentClient convenience helpers
+├── exercise_helpers.py         # shared: await_win, teardown_to_main_menu, run_exercise_level
+├── record.py                   # recording tool (see §10)
+├── test_01_health.py           # /health endpoint
+├── test_02_state.py            # /state screen detection + widget tree
+├── test_03_screenshot.py       # GL and OS screenshot paths; visual regression
+├── test_04_navigation.py       # click, type, screen transitions
+├── test_05_languages.py        # language list in SetupGame
+├── test_06_ingame.py           # studio, cheats (showsoluce, winmission)
+├── test_07_win_no_cheats.py    # program the robot to win without cheats
+├── test_08_program_api.py      # /launch, rich /objects, /program and /diagnostics
+├── test_09_chapter_one.py      # parametrized: all 7 Exercises ch1 levels completed
+├── test_10_exercises_all.py    # parametrized: all 31 Exercises ch2–7 levels completed
+└── snapshots/                  # baseline PNGs for visual regression
 ```
+
+**`exercise_helpers.py`** is the shared exercise-test library.  
+`test_09` and `test_10` both import from it — no code is duplicated between them.
+
+| Helper | Description |
+|--------|-------------|
+| `await_win(client, timeout, label)` | Polls `/state` until `screen == "LevelComplete"`; calls `pytest.fail` on timeout |
+| `teardown_to_main_menu(client)` | Drives back to `MainMenu` from any in-session screen (SatCom → InGame → Studio → InGame → LevelComplete → LevelSelect → MainMenu) |
+| `run_exercise_level(client, category, chap, rank, source, win_timeout, title, prep_hook)` | Full exercise flow: navigate → launch → poll for robot shortcuts (widget-based, no fixed sleep) → set_speed(16) → dismiss_satcom → prep_hook → open_studio → inject source → StudioRun → dismiss_satcom → StudioOK → set_speed(16) → await_win; always calls teardown_to_main_menu in finally |
 
 ### 8.2 Running tests
 
@@ -823,6 +869,20 @@ pytest tests/agent/ -v \
 ```sh
 COLOBOT_AGENT_URL=http://localhost:7777 pytest tests/agent/ --update-snapshots
 ```
+
+**Focused iteration (single level):**
+```sh
+# Run one specific exercise level — fast iteration on a failing test
+COLOBOT_AGENT_URL=http://localhost:7777 pytest tests/agent/test_10_exercises_all.py \
+  -k "ch04_lvl04" -v -s
+
+# Run a full chapter
+COLOBOT_AGENT_URL=http://localhost:7777 pytest tests/agent/test_10_exercises_all.py \
+  -k "ex_ch03" -v -s
+```
+
+The test IDs follow the pattern `ex_chCC_lvlRR-<title_slug>` so `-k "ch03"` matches
+all chapter 3 levels, `-k "ch03_lvl05"` matches exactly one level.
 
 ### 8.3 CI integration
 
@@ -900,7 +960,99 @@ translated `.txt` file is missing for that language.
 
 ---
 
-## 11. Integration Points
+## 11. CBot Scripting Gotchas
+
+Known CBot language quirks encountered during test development.  
+These affect both test script authoring and official level solutions.
+
+### 11.1 Purged public class type confusion
+
+**Symptom:** After navigating away from a level that defined a public class (e.g.
+`exchange`, `order`) and back into the same level, CBot rejects the class name as an
+unknown type during compilation of a new program. The error appears even though the
+class is defined in the same source file.
+
+**Root cause:** `CBotClass::m_publicClasses` is a global static registry that
+persists across level transitions. When a level is torn down, public classes are
+purged (removed from live objects) but the `CBotClass` nodes remain in the registry
+with `m_IsDef = false`. During the next compilation, the parser finds the stale node
+and sees an incomplete (not-yet-defined) class, which it rejects.
+
+The situation is ambiguous: a node with `m_IsDef = false` might be a purged class
+from a prior level (reject) or a class in the *same program* that is still being
+compiled in a prior pass (accept).
+
+**Fix (implemented):** `CBotInstr::Compile` and `TypeParam` (CBotUtils.cpp) use a
+two-condition guard:
+
+```cpp
+if (pClass->IsFullyDefined() ||
+    pStack->GetProgram()->ClassExists(pClass->GetName()))
+```
+
+`IsFullyDefined()` returns true once all three compilation phases complete.
+`ClassExists()` returns true for classes belonging to the *current program*, allowing
+forward references within a single source file while rejecting stale purged classes.
+
+### 11.2 Integer NaN sentinel (`int m_type = nan`)
+
+**Symptom:** An exchange protocol using `int m_type = nan` as a "no order pending"
+sentinel deadlocks at high simulation speed. The put()-side condition
+`m_order.m_type == nan` is always false, so `put()` always returns false and the
+sending side spins forever.
+
+**Root cause:** `CBotVar::VarIsNAN()` (used by `==` comparisons involving `nan`)
+checks for the `InitType::DEF` vs `InitType::NAN` distinction on floating-point
+variables only. Integer variables are always stored as integers — assigning `nan` to
+an `int` silently truncates to `0` and sets no NaN flag.
+
+**Fix (implemented):**
+- Added `CBotVar::InitType::NAN_INT = 3` to the init-type enum.
+- `CBotVarInteger::SetValFloat/SetValDouble` now sets `NAN_INT` when the incoming
+  float is `std::isnan()` instead of converting to 0.
+- `VarIsNAN()` checks for `NAN_INT` on integer types.
+
+**Workaround (test override):** Replace `nan` sentinel with `-1`:
+
+```cbot
+int m_type = -1;   // -1 means "empty"; -1 == -1 works correctly
+```
+
+### 11.3 ExchangePost race condition at high simulation speed
+
+**Symptom:** A remote-control level passes at normal speed but the slave robot
+executes wrong commands (e.g. `move(0)`, `turn(0)`) at high speed (`set_speed(16)`).
+
+**Root cause:** The official controller calls `send("order", ...)` then
+`send("param", ...)` in that order. At high speed, CBot can tick the slave robot
+between these two `send()` calls: the slave's `testinfo("order")` returns true,
+reads `param` (not yet written → 0), executes the command with value 0, then deletes
+the info. By the time `send("param", ...)` executes, the slave has already consumed
+the order with the wrong parameter.
+
+**Fix (test override):** Send `"param"` before `"order"` so the slave can never
+read a half-written message:
+
+```cbot
+send("param", param, 100);   // write value first
+send("order", order, 100);   // write key second — slave wakes up here
+```
+
+### 11.4 `ListStudioPrograms` opens SatCom instead of switching slots
+
+**Symptom:** Clicking `ListStudioPrograms` inside the Studio dialog opens the SatCom
+help viewer rather than switching the active program slot.
+
+**Root cause:** The Studio's program list widget is wired to `EVENT_SATCOM_*` — its
+click handler opens the SatCom documentation browser, not a slot selector.
+
+**Workaround:** Use `select("ListPrograms", index=N)` on the **HUD** (outside Studio)
+*before* opening Studio to set the desired active slot. The slot stays selected when
+Studio opens.
+
+---
+
+## 12. Integration Points
 
 | Concern | Location | Detail |
 |---------|----------|--------|
@@ -922,7 +1074,7 @@ translated `.txt` file is missing for that language.
 
 ---
 
-## 12. Spec Evolution Log
+## 13. Spec Evolution Log
 
 | Version | Date | Change |
 |---------|------|--------|
@@ -934,5 +1086,7 @@ translated `.txt` file is missing for that language.
 | 0.6 | 2026-04-20 | Full widget registry (all screens); translation support documented; `SetupDisplay/SetupGame/SetupSound` screens; complete SatCom + Studio widget sets |
 | 0.7 | 2026-04-20 | AI validation loop narrative (§1); `/program` GET+POST (§5.9–5.10); `/diagnostics` GET (§5.11); `/launch` planned (§5.12); rich object state planned (§5.8); AgentClient helpers `compile()`, `run_program()`, `get_program()`, `set_program()`, `diagnostics()` |
 | 0.8 | 2026-04-20 | `/launch` implemented — `SetLevel`+`ChangePhase(PHASE_SIMUL)` (§5.12); rich object state implemented — `energy`, `shield`, `rotation`, `program_running`, `task` fields in `/objects` (§5.8); AgentClient `launch()` |
+| 0.9  | 2026-04-26 | Coordinate systems section (§3.1) — four-layer stack, mapping bug class, test recipe; `POST /mouse_move` (§5.13); `POST /drag` (§5.14); `POST /mouse_button` (§5.15); `GET /window` (§5.16); AgentClient `mouse_move/drag/mouse_down/mouse_up/window()` |
 | 0.10 | 2026-04-26 | `test_09_chapter_one.py` — parametrized completion test for all 7 Exercises chapter-1 levels using official solution scripts |
-| 0.9 | 2026-04-26 | Coordinate systems section (§3.1) — four-layer stack, mapping bug class, test recipe; `POST /mouse_move` (§5.13); `POST /drag` (§5.14); `POST /mouse_button` (§5.15); `GET /window` (§5.16); AgentClient `mouse_move/drag/mouse_down/mouse_up/window()` |
+| 0.11 | 2026-05-01 | `test_10_exercises_all.py` — parametrized completion test for all 31 Exercises ch2–7 levels; `exercise_helpers.py` shared library (`await_win`, `teardown_to_main_menu`, `run_exercise_level`); widget-based robot-spawn polling replaces fixed `sleep(1.2)`; per-level source overrides for slow/buggy official scripts (Wasp Hunter 1-2, Labyrinth 1, Remote Control #2 race fix, Remote Control #4 int-nan fix) |
+| 0.12 | 2026-05-01 | CBot fixes: purged public-class type confusion (`IsFullyDefined() \|\| ClassExists()` guard, §11.1); integer NaN sentinel support (`InitType::NAN_INT`, §11.2); `open_studio()` rewritten as single-pass scan with `robot_filter` predicate, `any_runnable` anti-pollution fallback, and non-runnable soluce-slot reuse; `dismiss_satcom(delay)` extracted as helper; CBot scripting gotchas documented (§11); focused test run commands added (§8.2) |
