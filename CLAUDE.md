@@ -60,11 +60,22 @@ Use `COLOBOT_DATADIR=/path/to/data` to override the auto-detected data directory
 ## Tests
 
 ```sh
-cd build
-./Colobot-UnitTests        # or: make test / ctest -V .
+cd build-dev
+./Colobot-UnitTests        # run all 206 CBot unit tests
+./Colobot-UnitTests --gtest_filter="CBotUT.StringAsArray"  # single test
 ```
 
-Tests are under `test/unit/`. Enable with `-DTESTS=ON` at configure time.
+CBot unit tests live in `test/src/CBot/CBot_test.cpp`. Enable with `-DTESTS=ON` at configure time.
+
+### Agent / integration tests
+
+```sh
+pytest tests/agent/ -v                          # all agent tests
+pytest tests/agent/test_10_exercises_all.py -k "ex_ch03" -v -s   # one chapter
+pytest tests/agent/test_10_exercises_all.py -k "ch04_lvl04" -v -s # one level
+```
+
+Requires Colobot running with `-agentserver 7777`. See `tests/agent/` and `dev-status.md`.
 
 ## Linting
 
@@ -86,6 +97,17 @@ The engine is split into several static libraries compiled together:
   - `ui/` — all 2D interface panels, controls, screen managers
 - **`CBot/`** — the in-game C-like scripting language interpreter (used by players to program robots)
 - **`colobot-common/`** — shared string utilities and types
+
+### CBot interpreter internals
+
+The CBot interpreter compiles robot scripts in three passes (tokenise → class/function headers → function bodies). Key subsystems:
+
+- **`CBotInstr` subclasses** (`CBot/src/CBot/CBotInstr/`) — one class per language construct. Each implements `Compile()` (static, parse + type-check), `Execute()` (runtime), and `ExecuteVar()` / `RestoreStateVar()` for lvalue chains.
+- **`CBotVar` subclasses** (`CBot/src/CBot/CBotVar/`) — typed value holders. `CBotVarValue<T, type>` is the template base for primitive types; `CBotVarArray` and `CBotVarClass` handle aggregates.
+- **`CBotClass::m_publicClasses`** — static set of all `public class` instances across programs. Classes are purged (`m_IsDef=false`) when their owning `CBotProgram` is destroyed but remain in the set until `CBotProgram::Free()`. Guard before accepting a class as a type: `IsFullyDefined() || program->ClassExists(name)`.
+- **Subscript chain** — `CBotExprVar::Compile` and `CBotLeftExpr::Compile` walk a while-loop, checking `var->GetType()` to dispatch `CBotIndexExpr` (arrays), `CBotStringCharExpr` (string char access), or `CBotFieldExpr` (class members). Compile-time `var` advances with each subscript, enabling e.g. `string[][n]` composition without special cases.
+- **`CBotStringCharExpr`** (`CBotInstr/CBotStringCharExpr.{h,cpp}`) — implements `s[n]` read and write. Write path uses `CBotVarStringChar`, a proxy `CBotVarString` subclass whose `SetValString()` modifies the parent string in-place.
+- **String stdlib** (`CBot/src/CBot/stdlib/StringFunctions.cpp`) — `strlen`, `strleft`, `strright`, `strmid`, `strval`, `strfind`, `strupper`, `strlower`.
 
 **Data flow:** `CApplication` event loop → `CRobotMain::Update()` → physics update → `CEngine::Render()`. Robot scripts run via `CScript` → `CBot` interpreter → callbacks in `scriptfunc.cpp`.
 

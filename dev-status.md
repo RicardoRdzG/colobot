@@ -1,6 +1,6 @@
 # dev-status.md — Exercise Test Suite Progress
 
-Last updated: 2026-05-01 (all 31 passing)
+Last updated: 2026-05-01 (206/206 unit tests; 31/31 exercise levels)
 Branch: `claude/awesome-napier-90fbf9`
 CBot fixes branch: `fix/cbot-purged-class-nan`
 
@@ -10,10 +10,12 @@ CBot fixes branch: `fix/cbot-purged-class-nan`
 
 | Suite | Expected | Last verified |
 |-------|----------|---------------|
+| Colobot-UnitTests (CBot) | 206/206 | 2026-05-01 |
 | test_09 (ch1, 7 levels) | 7/7 | 2026-04-26 |
 | test_10 (ch2–7, 31 levels) | 31/31 | 2026-05-01 |
 
-> Run `pytest tests/agent/ -v` to verify.
+> Run `pytest tests/agent/ -v` to verify exercise tests.
+> Run `./build-dev/Colobot-UnitTests` to verify CBot unit tests.
 
 ---
 
@@ -61,7 +63,23 @@ compile because the `exchange` class was purged from that program's context.
 Fix: detect running via `ButtonAddProgram.enabled` — the interface sets
 `bProgEnable = !IsProgram()`, disabling ButtonAddProgram when a script is running.
 
-### 5. ExchangePost race condition at 16× speed
+### 5. CBot — `string[n]` character indexing not implemented
+**Files:** `CBot/src/CBot/CBotInstr/CBotStringCharExpr.{h,cpp}`, `CBotExprVar.cpp`, `CBotLeftExpr.cpp`
+
+`s[n]` on a `string` was a hard compile error (CBotErrClosePar / 5001). No write equivalent
+existed at all. Implemented via two new classes:
+- `CBotStringCharExpr` — instruction emitted by both `CBotExprVar::Compile` and
+  `CBotLeftExpr::Compile` when `CBotTypString + [` is seen in the subscript while-loop.
+- `CBotVarStringChar` — proxy `CBotVarString` subclass whose `SetValString()` writes
+  the character back into the parent string's `std::string` in-place.
+
+Disambiguation from `string[]` array access is type-driven: after `arr[n]` the compile-time
+`var` pointer advances from `CBotTypArrayPointer` to `CBotTypString`; the next `[m]` then
+hits the string-char branch. `arr[n][m] = "X"` write-through chains both levels correctly.
+
+Tests unblocked: `StringAsArray`, `StringArrayCharAccess` (both previously DISABLED).
+
+### 6. ExchangePost race condition at 16× speed
 **File:** `tests/agent/test_10_exercises_all.py` (`_TREMOT2A_FIXED`)
 
 Official `tremot2a.txt` sends `"order"` then `"param"`. At high speed the slave

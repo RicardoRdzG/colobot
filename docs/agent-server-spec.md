@@ -1,6 +1,6 @@
 # Agent Command Server — Spec
 
-**Status:** DRAFT v0.12 — full exercise suite (ch2–7); CBot public-class fix; open_studio robot_filter + anti-pollution  
+**Status:** DRAFT v0.13 — CBot string-char indexing implemented; both previously-disabled CBot unit tests enabled; 206/206 passing  
 **Approach:** spec-first; analyst updates this doc as prototype clarifies unknowns  
 **Agents:**
 - `analyst` — owns this spec; refines it as prototype runs
@@ -1052,6 +1052,32 @@ Studio opens.
 
 ---
 
+### 11.5 CBot string character indexing — `s[n]` read and write
+
+**Context:** CBot now supports `s[n]` for both reading and writing individual characters
+of a `string` variable (implemented via `CBotStringCharExpr` + `CBotVarStringChar`).
+
+**How it works:**
+- `s[n]` on a `string` returns a one-character string.
+- `s[n] = "X"` replaces the character at position `n` in `s` in-place.
+- `arr[n][m]` on a `string[]` array composes naturally: `arr[n]` yields the n-th element
+  (a `string`), then `[m]` applies character access on it — including write-through that
+  modifies the array element.
+
+**Type tracking:** The compile-time `var` pointer in `CBotExprVar::Compile` /
+`CBotLeftExpr::Compile` advances from `CBotTypArrayPointer` to `CBotTypString` after the
+array `[n]` branch; the next `[m]` then hits the string-char branch. No special syntax
+is needed: disambiguation is purely type-driven.
+
+**Previously disabled test:** `StringAsArray` (issue #694) is now enabled and passing.
+
+**Boundary behaviour:** Out-of-bounds index emits `CBotErrOutArray` at runtime. Negative
+indices are also rejected. The `string` is never extended by assignment through `s[n]`.
+
+**Prior alternative:** `strmid(s, n, 1)` for read; no write equivalent existed.
+
+---
+
 ## 12. Integration Points
 
 | Concern | Location | Detail |
@@ -1090,3 +1116,4 @@ Studio opens.
 | 0.10 | 2026-04-26 | `test_09_chapter_one.py` — parametrized completion test for all 7 Exercises chapter-1 levels using official solution scripts |
 | 0.11 | 2026-05-01 | `test_10_exercises_all.py` — parametrized completion test for all 31 Exercises ch2–7 levels; `exercise_helpers.py` shared library (`await_win`, `teardown_to_main_menu`, `run_exercise_level`); widget-based robot-spawn polling replaces fixed `sleep(1.2)`; per-level source overrides for slow/buggy official scripts (Wasp Hunter 1-2, Labyrinth 1, Remote Control #2 race fix, Remote Control #4 int-nan fix) |
 | 0.12 | 2026-05-01 | CBot fixes: purged public-class type confusion (`IsFullyDefined() \|\| ClassExists()` guard, §11.1); integer NaN sentinel support (`InitType::NAN_INT`, §11.2); `open_studio()` rewritten as single-pass scan with `robot_filter` predicate, `any_runnable` anti-pollution fallback, and non-runnable soluce-slot reuse; `dismiss_satcom(delay)` extracted as helper; CBot scripting gotchas documented (§11); focused test run commands added (§8.2) |
+| 0.13 | 2026-05-01 | CBot string-char indexing: new `CBotStringCharExpr` instruction + `CBotVarStringChar` proxy implements `s[n]` read and write; `string[][n]` double-subscript composes automatically via compile-time type tracking. `PublicClasses` test enabled (correct `CBotErrUndefClass` on purged-class). `StringAsArray` + `StringArrayCharAccess` tests enabled. 206/206 unit tests passing. |
