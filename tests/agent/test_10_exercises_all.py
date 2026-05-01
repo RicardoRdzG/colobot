@@ -32,8 +32,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
-from conftest import navigate_to_main_menu
 from agent_client import AgentClient
+from exercise_helpers import run_exercise_level
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -275,73 +275,43 @@ def _prep_ch07_lvl02_slave(client: AgentClient) -> bool:
     wait condition always true — a permanent deadlock.
 
     The PracticeBot has run=1 so the broken slave auto-starts, disabling
-    ButtonAddProgram.  Instead we open Studio directly on the running slot:
-    StudioRun stops the running slave (toggles stop when already running), then
-    we inject the fixed source and StudioRun again to compile and start it.
+    ButtonAddProgram.  We open Studio directly on the running slot: StudioRun stops
+    the running slave (toggles stop when already running), then we inject the fixed
+    source and StudioRun again to compile and start it.
     """
-    import time as _t
-
-    for evt_id in range(1501, 1550):
-        widget_id = f"evt:{evt_id}"
-        if client.find_widget(widget_id) is None:
-            continue
+    def _is_practice_bot(c: AgentClient) -> bool:
         try:
-            client._post("/click", {"id": widget_id})
-            _t.sleep(0.3)
-        except Exception:
-            continue
-        if client.find_widget("ButtonOpenStudio") is None:
-            continue
-        # Identify the PracticeBot by its running slave source
-        try:
-            prog = client.get_program(0)
-            src = prog.get("source", "")
-            if "Slave4" not in src and "m_type" not in src:
-                continue  # not the slave bot — skip
-        except Exception:
-            continue
-        # Found the PracticeBot — replace its broken slave via Studio
-        try:
-            client.click("ButtonOpenStudio")
-            client.wait_for_screen("Studio", timeout=5)
-            # If the broken slave is already running (run=1 auto-start), stop it
-            # first so the next StudioRun compiles-and-starts rather than just stops.
-            try:
-                if client.diagnostics().get("running"):
-                    client.click("StudioRun")   # stop the broken slave
-                    _t.sleep(0.3)
-                    if client.find_widget("SatComClose") is not None:
-                        try:
-                            client.click("SatComClose")
-                            _t.sleep(0.2)
-                        except Exception:
-                            pass
-            except Exception:
-                pass
-            # Inject the fixed source and start the new slave
-            edit = client.find_widget("StudioEdit")
-            if not edit or edit.get("value", "").strip() != _TREMOT4B_FIXED.strip():
-                client.type("StudioEdit", _TREMOT4B_FIXED)
-                _t.sleep(0.2)
-            client.click("StudioRun")   # compile and start fixed slave
-            _t.sleep(0.3)
-            if client.find_widget("SatComClose") is not None:
-                try:
-                    client.click("SatComClose")
-                    _t.sleep(0.3)
-                except Exception:
-                    pass
-            client.click("StudioOK")
-            client.wait_for_screen("InGame", timeout=5)
-            # Studio resets speed to 1.0× on open; restore for the main test.
-            try:
-                client.set_speed(16.0)
-            except Exception:
-                pass
-            return True
+            src = c.get_program(0).get("source", "")
+            return "Slave4" in src or "m_type" in src
         except Exception:
             return False
-    return False  # PracticeBot not found
+
+    if not client.open_studio(robot_filter=_is_practice_bot):
+        return False
+
+    try:
+        # If the broken slave is already running (run=1 auto-start), stop it first
+        # so the next StudioRun compiles-and-starts rather than just stops.
+        if client.diagnostics().get("running"):
+            client.click("StudioRun")   # stop the broken slave
+            time.sleep(0.3)
+            client.dismiss_satcom()
+        edit = client.find_widget("StudioEdit")
+        if not edit or edit.get("value", "").strip() != _TREMOT4B_FIXED.strip():
+            client.type("StudioEdit", _TREMOT4B_FIXED)
+            time.sleep(0.2)
+        client.click("StudioRun")   # compile and start fixed slave
+        time.sleep(0.3)
+        client.dismiss_satcom()
+        client.click("StudioOK")
+        client.wait_for_screen("InGame", timeout=5)
+        try:
+            client.set_speed(16.0)   # Studio resets speed; restore for the main test
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
 
 
 _PREPARE_HOOKS: dict = {
@@ -398,57 +368,6 @@ _EXERCISE_LEVELS = _discover_exercises(skip_chapters=(1,))
 
 
 # ---------------------------------------------------------------------------
-# Helpers (shared with test_09)
-# ---------------------------------------------------------------------------
-
-def _await_win(client: AgentClient, timeout: float, label: str) -> str:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        screen = client.state()["screen"]
-        if screen == "LevelComplete":
-            return screen
-        time.sleep(0.2)
-    pytest.fail(
-        f"{label}: LevelComplete not reached within {timeout}s "
-        f"(last screen: {client.state()['screen']})"
-    )
-
-
-def _teardown(client: AgentClient):
-    try:
-        client.set_speed(1.0)
-    except Exception:
-        pass
-    try:
-        screen = client.state()["screen"]
-        if screen == "SatCom":
-            client.click("SatComClose")
-            client.wait_for_screen("InGame", timeout=5)
-            screen = "InGame"
-        if screen == "Studio":
-            client.click("StudioCancel")
-            client.wait_for_screen("InGame", timeout=5)
-            screen = "InGame"
-        if screen == "LevelComplete":
-            client.click("ButtonEndLevel")
-            client.wait_for_screen("LevelSelect", timeout=10)
-            screen = "LevelSelect"
-        if screen == "LevelSelect":
-            client.click("ButtonBack")
-            client.wait_for_screen("MainMenu", timeout=10)
-        elif screen == "InGameMenu":
-            client.click("ButtonAbort")
-            client.wait_for_screen("MainMenu", timeout=10)
-        elif screen == "InGame":
-            client.key("Escape")
-            client.wait_for_screen("InGameMenu", timeout=5)
-            client.click("ButtonAbort")
-            client.wait_for_screen("MainMenu", timeout=10)
-    except Exception:
-        pass
-
-
-# ---------------------------------------------------------------------------
 # Parametrized test
 # ---------------------------------------------------------------------------
 
@@ -469,69 +388,8 @@ def test_exercise_complete(
     win_timeout: int,
 ):
     """Launch the level, inject the official solution (or optimized override), and verify it wins."""
-    label = f"Exercises/ch{chap}/lvl{rank} ({title})"
-
-    navigate_to_main_menu(client)
-    client.launch("Exercises", chap, rank)
-    client.wait_for_screen("InGame", timeout=30)
-    time.sleep(1.2)
-    client.set_speed(16.0)
-
-    # Per-level preparation (e.g. astronaut installs power cell on trainer)
-    prepare = _PREPARE_HOOKS.get((chap, rank))
-    if prepare is not None:
-        if not prepare(client):
-            _teardown(client)
-            pytest.skip(f"{label}: prepare hook failed")
-
-    # Some levels auto-open SatCom on start; close it before scanning for robots.
-    if client.state()["screen"] == "SatCom":
-        try:
-            client.click("SatComClose")
-            client.wait_for_screen("InGame", timeout=10)
-        except Exception:
-            pass
-
-    if not client.open_studio(expected_source=source):
-        _teardown(client)
-        pytest.skip(f"{label}: no programmable robot found")
-
-    assert client.state()["screen"] == "Studio", f"{label}: Studio did not open"
-
-    try:
-        # Only write source if the editor doesn't already show it (avoids re-injection
-        # when reusing an existing matching slot from a previous test run).
-        edit = client.find_widget("StudioEdit")
-        if not edit or edit.get("value", "").strip() != source.strip():
-            client.type("StudioEdit", source)
-            time.sleep(0.2)
-        client.click("StudioRun")
-        time.sleep(0.3)
-        # Some robots auto-open SatCom inside Studio when the script starts;
-        # close it so StudioOK can actually dismiss the Studio window.
-        if client.find_widget("SatComClose") is not None:
-            try:
-                client.click("SatComClose")
-                time.sleep(0.3)
-            except Exception:
-                pass
-        client.click("StudioOK")
-        # Studio resets game speed to 1.0× on open; restore after closing.
-        client.set_speed(16.0)
-
-        win_screen = _await_win(client, win_timeout, label)
-
-        assert win_screen == "LevelComplete", \
-            f"{label}: unexpected win screen '{win_screen}'"
-        assert client.find_widget("ButtonEndLevel") is not None, \
-            f"{label}: LevelComplete reached but ButtonEndLevel missing"
-
-        # Explicitly finish the mission and return to MainMenu so each test
-        # starts from a clean state (don't rely solely on _teardown for this).
-        client.set_speed(1.0)
-        client.click("ButtonEndLevel")
-        client.wait_for_screen("LevelSelect", timeout=10)
-        client.click("ButtonBack")
-        client.wait_for_screen("MainMenu", timeout=10)
-    finally:
-        _teardown(client)
+    run_exercise_level(
+        client, "Exercises", chap, rank, source, win_timeout,
+        title=title,
+        prep_hook=_PREPARE_HOOKS.get((chap, rank)),
+    )

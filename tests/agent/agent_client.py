@@ -1,9 +1,10 @@
 """HTTP client wrapper for the Colobot agent server."""
 
 import base64
+import math
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import requests
 
@@ -59,9 +60,8 @@ class AgentClient:
 
     def key_hold(self, key: str, duration: float) -> dict:
         """Press a key, sleep for duration seconds, then release."""
-        import time as _t
         self.key_down(key)
-        _t.sleep(duration)
+        time.sleep(duration)
         return self.key_up(key)
 
     # ------------------------------------------------------------------
@@ -78,8 +78,6 @@ class AgentClient:
                    max_iters: int = 40) -> bool:
         """Walk the currently-selected astronaut Me to (tx, tz) in world coords.
         Issues short Up / Left / Right key holds. Returns True on success."""
-        import math as _m
-        import time as _t
         for _ in range(max_iters):
             objs = self.objects()
             me = next((o for o in objs if o["type"] == "Me"), None)
@@ -87,18 +85,18 @@ class AgentClient:
                 return False
             x, z = me["pos"]["x"], me["pos"]["z"]
             dx, dz = tx - x, tz - z
-            dist = _m.hypot(dx, dz)
+            dist = math.hypot(dx, dz)
             if dist < tolerance:
                 return True
-            target_ang = _m.atan2(-dz, dx)        # forward = (cos h, -sin h)
+            target_ang = math.atan2(-dz, dx)        # forward = (cos h, -sin h)
             cur_ang    = me["rotation"]["y"]
-            diff = (target_ang - cur_ang + _m.pi) % (2 * _m.pi) - _m.pi
+            diff = (target_ang - cur_ang + math.pi) % (2 * math.pi) - math.pi
             if abs(diff) > 0.2:
                 turn_key = "Right" if diff > 0 else "Left"
                 self.key_hold(turn_key, min(abs(diff) * 0.18, 0.4))
             else:
                 self.key_hold("Up", min(dist * 0.04, 0.4))
-            _t.sleep(0.1)
+            time.sleep(0.1)
         return False
 
     def me_pickup_and_install(self, item_type: str, robot_type: str) -> bool:
@@ -109,9 +107,6 @@ class AgentClient:
         bot starts without a power cell (power=-1) and the astronaut must
         manually install one before any robot script can run.
         """
-        import math as _m
-        import time as _t
-
         # key_hold durations are real-time; reset to 1× for predictable movement
         # regardless of whatever simulation speed is active, then restore.
         try:
@@ -127,7 +122,7 @@ class AgentClient:
             for evt in range(1501, 1510):
                 if self.find_widget(f"evt:{evt}") is not None:
                     self.click(f"evt:{evt}")
-                    _t.sleep(0.4)
+                    time.sleep(0.4)
                     if self.find_widget("ButtonTake") is not None:
                         break
             else:
@@ -144,17 +139,17 @@ class AgentClient:
             # units is comfortably within ButtonTake's interaction range.
             self.walk_me_to(item["pos"]["x"], item["pos"]["z"], tolerance=2.5, max_iters=60)
             self.click("ButtonTake")
-            _t.sleep(0.6)
+            time.sleep(0.6)
 
             # Step 2 — compute a position behind the bot (along its -forward axis)
             bh = bot["rotation"]["y"]
-            rear_x = bot["pos"]["x"] - _m.cos(bh) * 5.0
-            rear_z = bot["pos"]["z"] + _m.sin(bh) * 5.0
+            rear_x = bot["pos"]["x"] - math.cos(bh) * 5.0
+            rear_z = bot["pos"]["z"] + math.sin(bh) * 5.0
 
             # Step 3 — walk to the rear and drop
             self.walk_me_to(rear_x, rear_z, tolerance=2.5, max_iters=60)
             self.click("ButtonTake")
-            _t.sleep(0.6)
+            time.sleep(0.6)
 
             # Verify the cell is now attached (its world position becomes a small
             # local offset relative to the bot, e.g. (1.7, -0.5, 1.1)).
@@ -255,108 +250,134 @@ class AgentClient:
         """Click ButtonRunProgram on the selected robot's HUD."""
         self.click("ButtonRunProgram")
 
-    def open_studio(self, expected_source: str = None) -> bool:
-        """
-        Select a programmable robot and open its Studio code editor.
-        If expected_source is given, all program slots are scanned for one that
-        matches the source (runnable slots preferred, non-runnable accepted).
-        If found it is pre-selected via the in-game program list.
-        Skips robots that reject ButtonAddProgram (e.g. already-running bots).
+    def dismiss_satcom(self, delay: float = 0.3) -> bool:
+        """Close the SatCom overlay if it is currently showing.
+        Returns True if SatCom was present and dismissed."""
+        if self.find_widget("SatComClose") is None:
+            return False
+        try:
+            self.click("SatComClose")
+            time.sleep(delay)
+        except Exception:
+            pass
+        return True
 
-        Uses a two-pass strategy when expected_source is given:
-          Pass 1 — only consider robots that already have a slot (runnable or
-                   non-runnable) whose source matches expected_source.  This
-                   prevents the script from being injected onto the wrong robot
-                   (e.g. the Astronaut/Me) when the correct target robot has the
-                   script pre-loaded as a non-runnable slot in the level data.
-          Pass 2 — fallback: original behaviour, use the first available robot.
-                   Handles overridden sources where no robot has the exact source
-                   pre-loaded.
+    def open_studio(
+        self,
+        expected_source: str = None,
+        robot_filter: Optional[Callable[["AgentClient"], bool]] = None,
+    ) -> bool:
+        """Select a programmable robot and open its Studio code editor.
 
+        Prefers robots that already have a slot matching expected_source (runnable
+        slots first, non-runnable accepted) to avoid injecting onto the wrong robot.
+        If no robot has the source, falls back to the first robot with an existing
+        runnable slot (anti-pollution) or, as a last resort, adds a new slot.
+        Pass robot_filter to select by source content rather than exact text match
+        (e.g. to target a robot currently running a specific script).
         Returns True on success, False if no suitable robot found.
         """
-        import time as _t
+        # Single-pass scan: record the best match and a fallback simultaneously.
+        match_evt  = None   # evt id of the target robot (source match / filter match)
+        match_slot = None   # slot index to pre-select on match_evt (None = keep current)
+        fallback_evt  = None  # first robot that accepts ButtonAddProgram
+        fallback_slot = None  # first runnable slot on fallback robot (anti-pollution)
 
-        def _attempt(require_source_match: bool) -> bool:
-            for evt_id in range(1501, 1550):
-                widget_id = f"evt:{evt_id}"
-                if self.find_widget(widget_id) is None:
-                    continue
+        for evt_id in range(1501, 1550):
+            widget_id = f"evt:{evt_id}"
+            if self.find_widget(widget_id) is None:
+                continue
+            try:
+                self._post("/click", {"id": widget_id})
+            except Exception:
+                continue
+            time.sleep(0.3)
+            # Some robots open SatCom when selected; close it so the toolbar appears.
+            self.dismiss_satcom(delay=0.5)
+            if self.find_widget("ButtonOpenStudio") is None:
+                continue
+
+            # robot_filter: caller supplies a predicate; source matching is skipped.
+            if robot_filter is not None:
                 try:
-                    self._post("/click", {"id": widget_id})
-                except Exception:
-                    continue
-                _t.sleep(0.3)
-                # Some exercise robots open SatCom when selected; close it so
-                # the robot toolbar (ButtonOpenStudio) becomes accessible.
-                try:
-                    if self.state().get("screen") == "SatCom":
-                        self._post("/click", {"id": "SatComClose"})
-                        _t.sleep(0.5)
+                    if robot_filter(self):
+                        match_evt, match_slot = widget_id, None
+                        break
                 except Exception:
                     pass
-                if self.find_widget("ButtonOpenStudio") is None:
-                    continue
+                continue  # filter rejected this robot; keep scanning
 
-                # Scan all slots for a matching source.  Prefer runnable slots
-                # (to avoid re-adding a duplicate) but accept non-runnable slots
-                # too — level data often pre-loads the solution as non-runnable.
-                reuse_slot = None
-                if expected_source is not None:
-                    try:
-                        first = self.get_program(0)
-                        slot_count = first.get("slot_count", 1)
-                        for s in range(slot_count):
-                            try:
-                                p = self.get_program(s)
-                                if p.get("source", "").strip() == expected_source.strip():
-                                    if p.get("runnable"):
-                                        reuse_slot = s  # runnable match wins immediately
-                                        break
-                                    elif reuse_slot is None:
-                                        reuse_slot = s  # keep non-runnable as fallback
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
-
-                # Pass 1: skip robots that have no matching slot at all so we
-                # don't inject the source onto the wrong robot (e.g. Astronaut).
-                if require_source_match and reuse_slot is None:
-                    continue
-
-                if reuse_slot is None and self.find_widget("ButtonAddProgram") is not None:
-                    try:
-                        self.click("ButtonAddProgram")
-                        _t.sleep(0.2)
-                    except Exception:
-                        continue  # Bot is busy/running, try next shortcut
-
-                # Select the matching slot BEFORE opening Studio so that
-                # m_selScript points to it (Studio always edits the active slot).
-                # For a newly-added slot ButtonAddProgram already set m_selScript.
-                # Never use select("ListStudioPrograms") — its click handler opens
-                # help/SatCom instead of switching program slots.
-                if reuse_slot is not None:
-                    try:
-                        self.select("ListPrograms", index=reuse_slot)
-                        _t.sleep(0.2)
-                    except Exception:
-                        pass
-
+            # Scan program slots for a source match.
+            # Also record any runnable slot as an anti-pollution fallback so we
+            # never add a new slot when one already exists on the right robot.
+            reuse_slot = None
+            any_runnable = None
+            if expected_source is not None:
                 try:
-                    self.click("ButtonOpenStudio")
-                    self.wait_for_screen("Studio", timeout=5.0)
-                    return True
+                    first = self.get_program(0)
+                    slot_count = first.get("slot_count", 1)
+                    slot_list = [first] + [self.get_program(s) for s in range(1, slot_count)]
+                    for s, p in enumerate(slot_list):
+                        is_run = p.get("runnable", False)
+                        src_ok = p.get("source", "").strip() == expected_source.strip()
+                        if src_ok and is_run:
+                            reuse_slot = s   # exact runnable match — best possible
+                            break
+                        if src_ok and reuse_slot is None:
+                            reuse_slot = s   # non-runnable source match
+                        if is_run and any_runnable is None:
+                            any_runnable = s  # any runnable slot, for anti-pollution
                 except Exception:
-                    continue
+                    pass
+
+                if reuse_slot is not None:
+                    match_evt, match_slot = widget_id, reuse_slot
+                    break   # right robot found — stop scanning
+
+            # No source match on this robot; record as fallback if it can take a slot.
+            if fallback_evt is None and self.find_widget("ButtonAddProgram") is not None:
+                fallback_evt  = widget_id
+                fallback_slot = any_runnable  # reuse existing runnable slot if possible
+
+        use_evt  = match_evt  if match_evt  is not None else fallback_evt
+        use_slot = match_slot if match_evt  is not None else fallback_slot
+
+        if use_evt is None:
             return False
 
-        # Pass 1: prefer robots that already have the source in any slot.
-        if expected_source is not None and _attempt(require_source_match=True):
+        # Re-select the target robot (scan may have ended on a different robot).
+        try:
+            self._post("/click", {"id": use_evt})
+            time.sleep(0.3)
+            self.dismiss_satcom(delay=0.5)
+        except Exception:
+            return False
+
+        if self.find_widget("ButtonOpenStudio") is None:
+            return False
+
+        if use_slot is not None:
+            # Pre-select the identified slot so Studio opens on it.
+            # Never use ListStudioPrograms — its click handler opens SatCom/help.
+            try:
+                self.select("ListPrograms", index=use_slot)
+                time.sleep(0.2)
+            except Exception:
+                pass
+        elif robot_filter is None and self.find_widget("ButtonAddProgram") is not None:
+            # Add a new slot only when no reusable slot exists and no filter is in use.
+            try:
+                self.click("ButtonAddProgram")
+                time.sleep(0.2)
+            except Exception:
+                return False
+
+        try:
+            self.click("ButtonOpenStudio")
+            self.wait_for_screen("Studio", timeout=5.0)
             return True
-        # Pass 2: fallback — use first available robot (original behaviour).
-        return _attempt(require_source_match=False)
+        except Exception:
+            return False
 
     def select_programmable_robot(self, timeout: float = 3.0) -> bool:
         """
@@ -372,7 +393,7 @@ class AgentClient:
                 self._post("/click", {"id": widget_id})
             except Exception:
                 continue
-            import time as _t; _t.sleep(0.3)
+            time.sleep(0.3)
             if self.find_widget("ButtonOpenStudio") is not None:
                 return True
         return False
@@ -380,7 +401,7 @@ class AgentClient:
     def console(self, command: str) -> None:
         """Open the in-game console, execute a command, and close it."""
         self.key("Backquote")
-        import time; time.sleep(0.1)
+        time.sleep(0.1)
         self.type("EditConsole", command)
         self.key("Return")
 
@@ -445,7 +466,6 @@ class AgentClient:
             raise ImportError("pillow is required for visual regression: pip install pillow")
 
         import io
-        import math
 
         baseline_path = SNAPSHOTS_DIR / f"{name}.png"
         actual_bytes = self.screenshot(source=source)
