@@ -256,6 +256,25 @@ class CBotVarInteger : public CBotVarNumber<T, type>
 public:
     CBotVarInteger(const CBotToken &name) : CBotVarNumber<T, type>(name) {}
 
+    // Assigning float/double NaN to an integer type stores the UNDEF init
+    // state rather than doing static_cast<T>(NaN) (undefined behaviour).
+    // This lets VarIsNAN() detect it and makes `int x = nan` work as documented.
+    void SetValFloat(float val) override
+    {
+        if (std::isnan(val))
+            this->m_binit = CBotVar::InitType::NAN_INT;
+        else
+            CBotVarNumber<T, type>::SetValFloat(val);
+    }
+
+    void SetValDouble(double val) override
+    {
+        if (std::isnan(val))
+            this->m_binit = CBotVar::InitType::NAN_INT;
+        else
+            CBotVarNumber<T, type>::SetValDouble(val);
+    }
+
     CBotError Modulo(CBotVar* left, CBotVar* right) override
     {
         T r = static_cast<T>(*right);

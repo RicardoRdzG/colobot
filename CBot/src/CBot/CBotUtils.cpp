@@ -96,7 +96,15 @@ CBotTypResult TypeParam(CBotToken* &p, CBotCStack* pile)
 
     case TokenTypVar:
         pClass = CBotClass::Find(p);
-        if ( pClass != nullptr)
+        // Accept the class if it is fully compiled, OR if it is currently being
+        // compiled as part of this same program (m_IsDef=false during Step 2 /
+        // DefineClasses, where intra-program forward references are valid).
+        // Reject purged classes from previous programs (m_IsDef=false and not
+        // owned by this program) to prevent identifiers from being misidentified
+        // as class types.
+        if ( pClass != nullptr &&
+             (pClass->IsFullyDefined() ||
+              pile->GetProgram()->ClassExists(pClass->GetName())))
         {
             p = p->GetNext();
             return ArrayType(p, pile,
