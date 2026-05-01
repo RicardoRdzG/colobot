@@ -1,132 +1,127 @@
 # dev-status.md — Exercise Test Suite Progress
 
-Last updated: 2026-04-29  
-Branch: in-progress  
-Overall: **30/31 passing** before latest fix, expecting **31/31** after `open_studio` two-pass fix.
+Last updated: 2026-05-01 (all 31 passing)
+Branch: `claude/awesome-napier-90fbf9`
+CBot fixes branch: `fix/cbot-purged-class-nan`
 
 ---
 
-## Changes made this session
+## Current status
 
-### 1. CBot bug — purged `public class` breaks compilation across level transitions (FIXED)
+| Suite | Expected | Last verified |
+|-------|----------|---------------|
+| test_09 (ch1, 7 levels) | 7/7 | 2026-04-26 |
+| test_10 (ch2–7, 31 levels) | 31/31 | 2026-05-01 |
 
-**Files changed:**
-- `CBot/src/CBot/CBotClass.h` — added `IsFullyDefined()` accessor
-- `CBot/src/CBot/CBotInstr/CBotInstr.cpp` — guard class-type detection
-- `CBot/src/CBot/CBotUtils.cpp` — guard `TypeParam` class-type detection
-
-**Root cause:** `CBotClass::m_publicClasses` (global static set) retains purged class entries
-across level transitions. After level N ends, its `public class` definitions are purged
-(`m_IsDef=false`, fields/methods cleared) but remain in the registry. When level N+1's
-scripts compile, identifiers like `order` or `exchange` are mistakenly resolved as type
-names instead of variable names, producing "Variable name missing" errors.
-
-**Fix logic:**
-```cpp
-if (pClass != nullptr &&
-    (pClass->IsFullyDefined() ||                          // fully compiled
-     pStack->GetProgram()->ClassExists(pClass->GetName()))) // being compiled now
-```
-The `ClassExists` check is critical: during CBot's Step 2 (DefineClasses), all classes in
-the same program have `m_IsDef=false`. Without it, intra-program class references (e.g.
-`exchange` using `order` as a field type) also break.
-
-**Levels fixed:** ch3/lvl9 (Remote Control #1), ch7/lvl2 (Remote Control #4),
-ch7/lvl3 (Remote Control #5).
+> Run `pytest tests/agent/ -v` to verify.
 
 ---
 
-### 2. `open_studio` — wrong robot selected when Astronaut appears first (FIXED)
+## Bugs fixed this branch
 
-**File changed:** `tests/agent/agent_client.py` — `open_studio()` method
+### 1. CBot — purged `public class` breaks compilation across level transitions
+**Files:** `CBot/src/CBot/CBotClass.h`, `CBotInstr.cpp`, `CBotUtils.cpp`
 
-**Root cause:** Shortcut buttons 1501-1549 list all selectable robots. After several
-missions the Astronaut (Me) accumulates program slots and gets `ButtonOpenStudio`.
-Me appears at a lower evt number than the target robot, so Me was selected first.
-The old code only scanned for `runnable=True` slots; finding none on Me, it called
-`ButtonAddProgram` on Me, injecting the solution onto the wrong robot.
+After a level ends, public classes are purged (`m_IsDef=false`) but stay in
+`m_publicClasses`. The parser mistook stale entries as known types. Fixed with a
+two-condition guard: accept a class name only if fully compiled **or** belongs to
+the currently-compiling program (`ClassExists`).
 
-**Fix:** Two-pass strategy:
-- **Pass 1** (`require_source_match=True`): iterate 1501-1549, skip any robot that has no
-  slot (runnable or non-runnable) with matching source. This finds the pre-loaded
-  non-runnable slot on the correct robot (e.g. TrackedShooter has `script4="tchasse1.txt"
-  scriptRunnable4=false`).
-- **Pass 2** (fallback, original behaviour): used when no robot has a pre-loaded matching
-  slot (e.g. source-overridden levels like `_TWASP_DIFF`). Falls back to first robot
-  with `ButtonAddProgram`.
+Levels unblocked: ch3/lvl9, ch7/lvl2, ch7/lvl3.
 
-**Level fixed:** ch4/lvl4 "Patient Hunter" — was consistently failing when run after
-ch4/lvl3 because tchasse1.txt was injected onto Me instead of TrackedShooter.
+### 2. CBot — `int m_type = nan` sentinel always evaluates false
+**Files:** `CBotVar.h`, `CBotVarValue.h`, `CBotTwoOpExpr.cpp`
+
+`VarIsNAN()` only detected NaN on float variables. Assigning `nan` to an `int`
+silently truncated to 0. Added `InitType::NAN_INT = 3`; integer SetValFloat sets
+it when `std::isnan()`; VarIsNAN checks for it.
+
+Level unblocked: ch7/lvl2 (also has script override using `-1` sentinel).
+
+### 3. `open_studio` — wrong robot selected (Astronaut before target)
+**File:** `tests/agent/agent_client.py`
+
+Shortcut buttons list all selectable robots. After several missions the Astronaut
+accumulates slots and appeared before the target robot. Single-pass rewrite:
+- Prefers robots with a source-matching slot (runnable first, non-runnable accepted).
+- Anti-pollution fallback: reuses existing runnable slot instead of `ButtonAddProgram`.
+- `robot_filter` predicate lets prepare hooks target by script content.
+
+Level unblocked: ch4/lvl4 and any level run after Me has accumulated slots.
+
+### 4. `open_studio` — slave robot selected instead of controller (ch6/lvl3, ch7/lvl1, ch7/lvl3)
+**File:** `tests/agent/agent_client.py`
+
+`currently_running` detection used `ButtonStopProgram` (EVENT_OBJECT_PROGSTOP), which
+is never created as a toolbar widget. So robots with auto-started slaves (run=1) appeared
+as idle. The first shortcut button (often the slave) became `fallback_evt`, and Studio
+opened on the slave — overwriting the slave script with the controller, then failing to
+compile because the `exchange` class was purged from that program's context.
+
+Fix: detect running via `ButtonAddProgram.enabled` — the interface sets
+`bProgEnable = !IsProgram()`, disabling ButtonAddProgram when a script is running.
+
+### 5. ExchangePost race condition at 16× speed
+**File:** `tests/agent/test_10_exercises_all.py` (`_TREMOT2A_FIXED`)
+
+Official `tremot2a.txt` sends `"order"` then `"param"`. At high speed the slave
+can read `param=0` between the two sends. Override sends `"param"` first.
+
+Level fixed: ch6/lvl3.
 
 ---
 
-### 3. Timeout override added (FIXED)
+## Per-level overrides
 
-**File changed:** `tests/agent/test_10_exercises_all.py`
+### Source overrides (`_SOURCE_OVERRIDES`)
 
-```python
-_TIMEOUT_OVERRIDES = {
-    (3, 5): 200,   # Exchange posts 2
-    (3, 8): 200,   # The gold digger
-    (4, 4): 200,   # Patient hunter — random target movement
-}
-```
+| Level | Script | Reason |
+|-------|--------|--------|
+| ch2/lvl6–7 | `_TWASP_DIFF` | Official `twasp1/2.txt` uses blocking `turn()+wait(0.2)` — ~250 s. Differential-steering version clears in ~52 s. |
+| ch3/lvl6 | `_TLABY_LOOP` | Official `tlaby1.txt` has no loop — only moves one cell and stops. |
+| ch6/lvl3 | `_TREMOT2A_FIXED` | ExchangePost race at high speed (see above). |
+| ch7/lvl2 | `_TREMOT4A_FIXED` + `_TREMOT4B_FIXED` | int/nan sentinel deadlock (see above). |
+
+### Timeout overrides (`_TIMEOUT_OVERRIDES`)
+
+| Level | Timeout | Reason |
+|-------|---------|--------|
+| ch3/lvl5 | 200 s | ~520 m of waypoint data over ExchangePost |
+| ch3/lvl8 | 200 s | 36 sniff()+move() iterations at ~3 s each |
+| ch4/lvl4 | 200 s | TargetBot wanders randomly; worst-case >120 s |
 
 ---
 
-## Known remaining issues
+## Test infrastructure
 
-### Timing sensitivity at high simulation speed (16×)
+- **Speed:** `set_speed(16.0)` called after level spawn and again after `StudioOK`
+  (Studio resets speed to 1× on open — confirmed in `studio.cpp:573`).
+- **SatCom:** After `StudioRun`, poll up to 0.5 s for SatCom to appear and dismiss
+  it before clicking `StudioOK` (replaces fixed `sleep(0.3)`).
+- **Robot spawn:** Poll for `evt:15*` shortcut buttons before starting (replaces
+  fixed `sleep(1.2)`).
+- **Slot anti-pollution:** `open_studio` reuses existing runnable slots; only calls
+  `ButtonAddProgram` when truly no usable slot exists.
+- **Shared library:** `exercise_helpers.py` — `await_win`, `teardown_to_main_menu`,
+  `run_exercise_level`. Both test_09 and test_10 import from it.
 
-Some levels exhibit race conditions when run at 16× speed that do not occur at 1×:
+---
 
-- **ch6/lvl3 Remote Control #2** — `tremot2a.txt` sends "order" before "param" over
-  ExchangePost. At high speed, CBot ticks can interleave between the two `send()` calls:
-  the slave reads `param=0` before it is written. **Workaround:** `_TREMOT2A_FIXED`
-  override swaps send order so "param" is always present when slave wakes.
-  Currently **PASSING**.
+## Focused test commands
 
-- **ch7/lvl2 Remote Control #4** — `tremot4b.txt` uses `int m_type = nan` as sentinel.
-  CBot's `VarIsNAN()` returns false for `int` variables → `put()` always returns false →
-  deadlock. **Workaround:** `_TREMOT4B_FIXED` / `_TREMOT4A_FIXED` overrides use `-1`
-  as sentinel. Currently **PASSING**.
-
-- **General:** Studio resets game speed to 1× on open; tests restore to 16× after
-  `StudioOK`. There is a brief window between Studio closing and `set_speed(16.0)` where
-  the game runs at 1×. On slow machines this might cause timeouts near the limit.
-
-### Focused test commands
-
-Run a single level (replace chap/rank):
 ```sh
-cd tests/agent
-pytest test_10_exercises_all.py -k "ch4_lvl4" -v
+# Single level
+pytest tests/agent/test_10_exercises_all.py -k "ch04_lvl04" -v -s
+
+# Full chapter
+pytest tests/agent/test_10_exercises_all.py -k "ex_ch03" -v -s
+
+# test_09 only (ch1)
+pytest tests/agent/test_09_chapter_one.py -v
+
+# Full exercise suite
+pytest tests/agent/test_09_chapter_one.py tests/agent/test_10_exercises_all.py -v
+
+# All agent tests
+pytest tests/agent/ -v
 ```
-
-Run all chapter 4 levels:
-```sh
-pytest test_10_exercises_all.py -k "ch4" -v
-```
-
-Run full suite:
-```sh
-pytest test_10_exercises_all.py -v
-```
-
-Run with output capture disabled (see print statements):
-```sh
-pytest test_10_exercises_all.py -k "ch4_lvl4" -v -s
-```
-
----
-
-## Test infrastructure notes
-
-- **`agent_client.py`**: HTTP client wrapping the colobot agent server REST API.
-  Key methods: `open_studio()`, `get_program()`, `load_program()`, `set_speed()`.
-- **`test_10_exercises_all.py`**: Parametrized pytest. Discovers levels by scanning
-  `build-dev/data/levels/exercises/` for `_SOLUCE_RE` matches.
-- **Speed:** Tests run at 16× simulation speed. Studio always resets to 1× on open.
-- **State isolation:** Each test navigates to main menu before/after via `_teardown()`.
-- **Prepare hooks:** Some levels require physical setup (e.g. installing power cell on
-  trainer bot) via `_PREPARE_HOOKS`. See `_prep_install_powercell` etc.

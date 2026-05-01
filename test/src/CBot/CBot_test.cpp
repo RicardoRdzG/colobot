@@ -1442,8 +1442,7 @@ TEST_F(CBotUT, ClassMissingCloseBlock)
     );
 }
 
-// TODO: NOOOOOO!!! Nononononono :/
-TEST_F(CBotUT, DISABLED_PublicClasses)
+TEST_F(CBotUT, PublicClasses)
 {
     // Keep the program, so that the class continues to exist after ExecuteTest finishes
     auto publicProgram = ExecuteTest(R"(
@@ -1954,8 +1953,7 @@ TEST_F(CBotUT, StringEscapeCodeErrors)
     );
 }
 
-// TODO: not implemented, see issue #694
-TEST_F(CBotUT, DISABLED_StringAsArray)
+TEST_F(CBotUT, StringAsArray)
 {
     ExecuteTest(R"(
         extern void StringAsArray()
