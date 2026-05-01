@@ -380,6 +380,15 @@ public:
 
     void Update(CBotVar* var, void* user);
 
+    /*!
+     * \brief IsFullyDefined Returns true if this class is fully compiled.
+     *
+     * A class that has been purged (e.g. when its owning CBotProgram is
+     * destroyed) has m_IsDef set to false and must not be treated as a valid
+     * type by the parser.
+     */
+    bool IsFullyDefined() const { return m_IsDef; }
+
 private:
     //! List of all public classes
     static std::set<CBotClass*> m_publicClasses;

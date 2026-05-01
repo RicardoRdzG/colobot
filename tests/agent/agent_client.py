@@ -259,80 +259,104 @@ class AgentClient:
         """
         Select a programmable robot and open its Studio code editor.
         If expected_source is given, all program slots are scanned for one that
-        is already runnable with matching source; if found it is selected in the
-        Studio list so StudioRun is enabled without adding a duplicate slot.
+        matches the source (runnable slots preferred, non-runnable accepted).
+        If found it is pre-selected via the in-game program list.
         Skips robots that reject ButtonAddProgram (e.g. already-running bots).
+
+        Uses a two-pass strategy when expected_source is given:
+          Pass 1 — only consider robots that already have a slot (runnable or
+                   non-runnable) whose source matches expected_source.  This
+                   prevents the script from being injected onto the wrong robot
+                   (e.g. the Astronaut/Me) when the correct target robot has the
+                   script pre-loaded as a non-runnable slot in the level data.
+          Pass 2 — fallback: original behaviour, use the first available robot.
+                   Handles overridden sources where no robot has the exact source
+                   pre-loaded.
+
         Returns True on success, False if no suitable robot found.
         """
         import time as _t
-        for evt_id in range(1501, 1550):
-            widget_id = f"evt:{evt_id}"
-            if self.find_widget(widget_id) is None:
-                continue
-            try:
-                self._post("/click", {"id": widget_id})
-            except Exception:
-                continue
-            _t.sleep(0.3)
-            if self.find_widget("ButtonOpenStudio") is None:
-                continue
 
-            # Scan all slots for an existing runnable slot with matching source.
-            # This avoids adding a duplicate slot AND ensures we end up on a
-            # runnable slot (the game may reset the active slot to the original
-            # non-runnable one after a level reload, so we must select it explicitly).
-            reuse_slot = None
-            if expected_source is not None:
+        def _attempt(require_source_match: bool) -> bool:
+            for evt_id in range(1501, 1550):
+                widget_id = f"evt:{evt_id}"
+                if self.find_widget(widget_id) is None:
+                    continue
                 try:
-                    first = self.get_program(0)
-                    slot_count = first.get("slot_count", 1)
-                    for s in range(slot_count):
-                        try:
-                            p = self.get_program(s)
-                            if p.get("runnable") and \
-                                    p.get("source", "").strip() == expected_source.strip():
-                                reuse_slot = s
-                                break
-                        except Exception:
-                            pass
+                    self._post("/click", {"id": widget_id})
+                except Exception:
+                    continue
+                _t.sleep(0.3)
+                # Some exercise robots open SatCom when selected; close it so
+                # the robot toolbar (ButtonOpenStudio) becomes accessible.
+                try:
+                    if self.state().get("screen") == "SatCom":
+                        self._post("/click", {"id": "SatComClose"})
+                        _t.sleep(0.5)
                 except Exception:
                     pass
+                if self.find_widget("ButtonOpenStudio") is None:
+                    continue
 
-            new_slot = None
-            if reuse_slot is None and self.find_widget("ButtonAddProgram") is not None:
-                try:
-                    # Remember old count so we can select the newly-added slot
-                    # in Studio (the game may open on a pre-existing non-runnable
-                    # slot instead of the one we just added).
+                # Scan all slots for a matching source.  Prefer runnable slots
+                # (to avoid re-adding a duplicate) but accept non-runnable slots
+                # too — level data often pre-loads the solution as non-runnable.
+                reuse_slot = None
+                if expected_source is not None:
                     try:
                         first = self.get_program(0)
-                        old_count = first.get("slot_count", 1)
-                    except Exception:
-                        old_count = None
-                    self.click("ButtonAddProgram")
-                    _t.sleep(0.2)
-                    if old_count is not None:
-                        new_slot = old_count  # new slot is appended at the end
-                except Exception:
-                    continue  # Bot is busy/running, try next shortcut
-
-            try:
-                self.click("ButtonOpenStudio")
-                self.wait_for_screen("Studio", timeout=5.0)
-                # Always explicitly select the target slot so StudioRun is enabled.
-                # reuse_slot: an existing runnable slot found during scan.
-                # new_slot: the slot we just added via ButtonAddProgram.
-                select_slot = reuse_slot if reuse_slot is not None else new_slot
-                if select_slot is not None:
-                    try:
-                        self.select("ListStudioPrograms", index=select_slot)
-                        _t.sleep(0.1)
+                        slot_count = first.get("slot_count", 1)
+                        for s in range(slot_count):
+                            try:
+                                p = self.get_program(s)
+                                if p.get("source", "").strip() == expected_source.strip():
+                                    if p.get("runnable"):
+                                        reuse_slot = s  # runnable match wins immediately
+                                        break
+                                    elif reuse_slot is None:
+                                        reuse_slot = s  # keep non-runnable as fallback
+                            except Exception:
+                                pass
                     except Exception:
                         pass
-                return True
-            except Exception:
-                continue
-        return False
+
+                # Pass 1: skip robots that have no matching slot at all so we
+                # don't inject the source onto the wrong robot (e.g. Astronaut).
+                if require_source_match and reuse_slot is None:
+                    continue
+
+                if reuse_slot is None and self.find_widget("ButtonAddProgram") is not None:
+                    try:
+                        self.click("ButtonAddProgram")
+                        _t.sleep(0.2)
+                    except Exception:
+                        continue  # Bot is busy/running, try next shortcut
+
+                # Select the matching slot BEFORE opening Studio so that
+                # m_selScript points to it (Studio always edits the active slot).
+                # For a newly-added slot ButtonAddProgram already set m_selScript.
+                # Never use select("ListStudioPrograms") — its click handler opens
+                # help/SatCom instead of switching program slots.
+                if reuse_slot is not None:
+                    try:
+                        self.select("ListPrograms", index=reuse_slot)
+                        _t.sleep(0.2)
+                    except Exception:
+                        pass
+
+                try:
+                    self.click("ButtonOpenStudio")
+                    self.wait_for_screen("Studio", timeout=5.0)
+                    return True
+                except Exception:
+                    continue
+            return False
+
+        # Pass 1: prefer robots that already have the source in any slot.
+        if expected_source is not None and _attempt(require_source_match=True):
+            return True
+        # Pass 2: fallback — use first available robot (original behaviour).
+        return _attempt(require_source_match=False)
 
     def select_programmable_robot(self, timeout: float = 3.0) -> bool:
         """
