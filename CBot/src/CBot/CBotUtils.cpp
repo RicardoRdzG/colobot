@@ -102,15 +102,19 @@ CBotTypResult TypeParam(CBotToken* &p, CBotCStack* pile)
         // Reject purged classes from previous programs (m_IsDef=false and not
         // owned by this program) to prevent identifiers from being misidentified
         // as class types.
-        if ( pClass != nullptr &&
-             (pClass->IsFullyDefined() ||
-              pile->GetProgram()->ClassExists(pClass->GetName())))
+        if ( pClass != nullptr )
         {
-            p = p->GetNext();
-            return ArrayType(p, pile,
-                             pClass->IsIntrinsic() ?
-                             CBotTypResult( CBotTypIntrinsic, pClass ) :
-                             CBotTypResult( CBotTypPointer,   pClass ) );
+            if ( pClass->IsFullyDefined() ||
+                 pile->GetProgram()->ClassExists(pClass->GetName()))
+            {
+                p = p->GetNext();
+                return ArrayType(p, pile,
+                                 pClass->IsIntrinsic() ?
+                                 CBotTypResult( CBotTypIntrinsic, pClass ) :
+                                 CBotTypResult( CBotTypPointer,   pClass ) );
+            }
+            // Class exists but its defining program was destroyed (purged).
+            pile->SetError(CBotErrUndefClass, p);
         }
     }
     return CBotTypResult( -1 );
