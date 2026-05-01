@@ -280,8 +280,15 @@ class AgentClient:
         # Single-pass scan: record the best match and a fallback simultaneously.
         match_evt  = None   # evt id of the target robot (source match / filter match)
         match_slot = None   # slot index to pre-select on match_evt (None = keep current)
-        fallback_evt  = None  # first robot that accepts ButtonAddProgram
-        fallback_slot = None  # first runnable slot on fallback robot (anti-pollution)
+        # Two-tier fallback: idle robots (ButtonRunProgram visible) are preferred over
+        # robots currently running a program.  Levels with a student-controlled robot and
+        # an auto-starting slave bot (run=1) would otherwise inject the solution onto the
+        # slave (which appears first in the shortcut list).
+        fallback_evt  = None   # tier-1: not currently running
+        fallback_slot = None
+        fallback_busy_evt  = None  # tier-2: currently running (last resort)
+        fallback_busy_slot = None
+        last_clicked_evt  = None   # last robot the scan actually clicked
 
         for evt_id in range(1501, 1550):
             widget_id = f"evt:{evt_id}"
@@ -291,6 +298,7 @@ class AgentClient:
                 self._post("/click", {"id": widget_id})
             except Exception:
                 continue
+            last_clicked_evt = widget_id
             time.sleep(0.3)
             # Some robots open SatCom when selected; close it so the toolbar appears.
             self.dismiss_satcom(delay=0.5)
@@ -331,13 +339,36 @@ class AgentClient:
                     pass
 
                 if reuse_slot is not None:
-                    match_evt, match_slot = widget_id, reuse_slot
-                    break   # right robot found — stop scanning
+                    # Prefer a runnable slot so Studio's Run button is enabled.
+                    # If the only source match is the scene's non-runnable solution
+                    # slot, use any other runnable slot (content will be re-injected).
+                    # If no runnable slot exists at all, skip match and let the
+                    # fallback path add a new slot via ButtonAddProgram instead.
+                    is_runnable_match = slot_list[reuse_slot].get("runnable", False)
+                    usable_slot = reuse_slot if is_runnable_match else any_runnable
+                    if usable_slot is not None:
+                        match_evt, match_slot = widget_id, usable_slot
+                        break   # right robot with usable slot found — stop scanning
 
             # No source match on this robot; record as fallback if it can take a slot.
-            if fallback_evt is None and self.find_widget("ButtonAddProgram") is not None:
-                fallback_evt  = widget_id
-                fallback_slot = any_runnable  # reuse existing runnable slot if possible
+            # Detect "currently running" via ButtonAddProgram's enabled state:
+            # bProgEnable = !IsProgram() disables ButtonAddProgram while a script runs.
+            # ButtonStopProgram (EVENT_OBJECT_PROGSTOP) is never created as a toolbar
+            # widget, so checking for its presence is unreliable.
+            add_prog = self.find_widget("ButtonAddProgram")
+            if add_prog is not None:
+                currently_running = not add_prog.get("enabled", True)
+                if not currently_running and fallback_evt is None:
+                    fallback_evt  = widget_id
+                    fallback_slot = any_runnable
+                elif currently_running and fallback_busy_evt is None:
+                    fallback_busy_evt  = widget_id
+                    fallback_busy_slot = any_runnable
+
+        # Use tier-2 only when no idle robot was found.
+        if fallback_evt is None:
+            fallback_evt  = fallback_busy_evt
+            fallback_slot = fallback_busy_slot
 
         use_evt  = match_evt  if match_evt  is not None else fallback_evt
         use_slot = match_slot if match_evt  is not None else fallback_slot
@@ -345,20 +376,26 @@ class AgentClient:
         if use_evt is None:
             return False
 
-        # Re-select the target robot (scan may have ended on a different robot).
-        try:
-            self._post("/click", {"id": use_evt})
-            time.sleep(0.3)
-            self.dismiss_satcom(delay=0.5)
-        except Exception:
-            return False
+        # Re-select the target robot only when the scan ended on a different one.
+        # If the scan already selected use_evt (match found → broke out of the loop),
+        # a second click on the same shortcut button would toggle the selection away
+        # to whatever was selected before — opening Studio on the wrong robot.
+        if use_evt != last_clicked_evt:
+            try:
+                self._post("/click", {"id": use_evt})
+                time.sleep(0.3)
+            except Exception:
+                return False
+        self.dismiss_satcom(delay=0.5)
 
         if self.find_widget("ButtonOpenStudio") is None:
             return False
 
         if use_slot is not None:
             # Pre-select the identified slot so Studio opens on it.
-            # Never use ListStudioPrograms — its click handler opens SatCom/help.
+            # The correct robot is already selected (either from the scan break, or
+            # from the explicit re-click above). select("ListPrograms") updates only
+            # the selected robot's m_selScript — it does not switch robots.
             try:
                 self.select("ListPrograms", index=use_slot)
                 time.sleep(0.2)

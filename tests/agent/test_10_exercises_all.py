@@ -294,21 +294,25 @@ def _prep_ch07_lvl02_slave(client: AgentClient) -> bool:
         # so the next StudioRun compiles-and-starts rather than just stops.
         if client.diagnostics().get("running"):
             client.click("StudioRun")   # stop the broken slave
-            time.sleep(0.3)
-            client.dismiss_satcom()
+            deadline = time.monotonic() + 0.5
+            while time.monotonic() < deadline:
+                if client.dismiss_satcom():
+                    break
+                time.sleep(0.05)
         edit = client.find_widget("StudioEdit")
         if not edit or edit.get("value", "").strip() != _TREMOT4B_FIXED.strip():
             client.type("StudioEdit", _TREMOT4B_FIXED)
             time.sleep(0.2)
         client.click("StudioRun")   # compile and start fixed slave
-        time.sleep(0.3)
-        client.dismiss_satcom()
+        deadline = time.monotonic() + 0.5
+        while time.monotonic() < deadline:
+            if client.dismiss_satcom():
+                break
+            time.sleep(0.05)
         client.click("StudioOK")
         client.wait_for_screen("InGame", timeout=5)
-        try:
-            client.set_speed(16.0)   # Studio resets speed; restore for the main test
-        except Exception:
-            pass
+        # Do NOT set speed here — run_exercise_level raises it to 16× after
+        # its own StudioOK, keeping setup safe from enemy attacks.
         return True
     except Exception:
         return False

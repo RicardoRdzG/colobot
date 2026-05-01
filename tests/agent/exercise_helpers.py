@@ -96,7 +96,10 @@ def run_exercise_level(
             break
         time.sleep(0.1)
 
-    client.set_speed(16.0)
+    # Keep game at 1× during all setup: briefing dismiss, prep hooks, robot scan,
+    # and Studio itself (Studio forces 1× on open anyway).  Enemies can't attack
+    # while we're clicking UI at 1×.  Speed is raised to 16× only after StudioOK
+    # so the robot script executes fast while keeping setup safe.
     client.dismiss_satcom()  # close auto-briefing if the level opened it
 
     if prep_hook is not None and not prep_hook(client):
@@ -113,10 +116,15 @@ def run_exercise_level(
             client.type("StudioEdit", source)
             time.sleep(0.2)
         client.click("StudioRun")
-        time.sleep(0.3)   # allow SatCom to appear if the script triggers it
-        client.dismiss_satcom()  # close briefing that some robots open on script start
+        # Poll up to 0.5 s for SatCom to appear (some scripts open it on start).
+        # Bail as soon as it's dismissed rather than sleeping the full window.
+        deadline = time.monotonic() + 0.5
+        while time.monotonic() < deadline:
+            if client.dismiss_satcom():
+                break
+            time.sleep(0.05)
         client.click("StudioOK")
-        client.set_speed(16.0)   # Studio resets simulation speed to 1× on open
+        client.set_speed(16.0)   # now safe: script running, no more UI interaction
 
         win_screen = await_win(client, win_timeout, label)
         assert win_screen == "LevelComplete", \
