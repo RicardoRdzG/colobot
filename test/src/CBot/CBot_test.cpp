@@ -1985,6 +1985,25 @@ TEST_F(CBotUT, ArraysOfStrings)
     )");
 }
 
+TEST_F(CBotUT, StringPassedByValue)
+{
+    ExecuteTest(R"(
+        void ModifyString(string s)
+        {
+            ASSERT(s == "hola");
+            s = "Hola";
+            ASSERT(s == "Hola");
+        }
+
+        extern void StringPassedByValue()
+        {
+            string a = "hola";
+            ModifyString(a);
+            ASSERT(a == "hola");
+        }
+    )");
+}
+
 TEST_F(CBotUT, StringFunctions)
 {
     ExecuteTest(R"(
