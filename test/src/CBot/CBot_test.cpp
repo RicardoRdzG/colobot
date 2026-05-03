@@ -1954,8 +1954,7 @@ TEST_F(CBotUT, StringEscapeCodeErrors)
     );
 }
 
-// TODO: not implemented, see issue #694
-TEST_F(CBotUT, DISABLED_StringAsArray)
+TEST_F(CBotUT, StringAsArray)
 {
     ExecuteTest(R"(
         extern void StringAsArray()
@@ -1965,6 +1964,45 @@ TEST_F(CBotUT, DISABLED_StringAsArray)
             ASSERT(s[3] == "o");
             s[2] = "L"; s[4] = "B"; s[6] = "T";
             ASSERT(s == "CoLoBoT");
+        }
+    )");
+}
+
+TEST_F(CBotUT, StringArrayCharAccess)
+{
+    // Verify that string[] array element access and string char access compose:
+    //   arr[n]    — returns the n-th string element (CBotTypString)
+    //   arr[n][m] — returns the m-th character of that element (CBotTypString, 1 char)
+    //   arr[n][m] = "x" — writes through both levels to the element in the array
+    ExecuteTest(R"(
+        extern void StringArrayCharAccess()
+        {
+            string[] a = {"abc", "xyz"};
+            ASSERT(a[0] == "abc");      // plain array element
+            ASSERT(a[1] == "xyz");
+            ASSERT(a[0][1] == "b");     // char of element
+            ASSERT(a[1][2] == "z");
+            a[0][1] = "B";              // write-through: char of element
+            ASSERT(a[0] == "aBc");      // element was modified in-place
+        }
+    )");
+}
+
+TEST_F(CBotUT, StringPassedByValue)
+{
+    ExecuteTest(R"(
+        void ModifyString(string s)
+        {
+            ASSERT(s == "hola");
+            s[0] = "H";
+            ASSERT(s == "Hola");
+        }
+
+        extern void StringPassedByValue()
+        {
+            string a = "hola";
+            ModifyString(a);
+            ASSERT(a == "hola");
         }
     )");
 }

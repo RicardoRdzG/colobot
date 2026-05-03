@@ -89,6 +89,8 @@ target_sources(CBot PRIVATE
     src/CBot/CBotInstr/CBotIf.h
     src/CBot/CBotInstr/CBotIndexExpr.cpp
     src/CBot/CBotInstr/CBotIndexExpr.h
+    src/CBot/CBotInstr/CBotStringCharExpr.cpp
+    src/CBot/CBotInstr/CBotStringCharExpr.h
     src/CBot/CBotInstr/CBotInstr.cpp
     src/CBot/CBotInstr/CBotInstr.h
     src/CBot/CBotInstr/CBotInstrCall.cpp
