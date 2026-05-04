@@ -181,7 +181,7 @@ public:
     void DestroyTeam(int team, DestructionType destructionType = DestructionType::Explosion);
 
     //! Counts all objects implementing given interface
-    int CountObjectsImplementing(ObjectInterfaceType interface);
+    int CountObjectsImplementing(ObjectInterfaceType interfaceType);
 
     //! Returns all objects
     CObjectContainerProxy GetAllObjects()

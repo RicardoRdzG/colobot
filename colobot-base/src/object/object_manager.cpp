@@ -245,12 +245,12 @@ void CObjectManager::DestroyTeam(int team, DestructionType destructionType)
     }
 }
 
-int CObjectManager::CountObjectsImplementing(ObjectInterfaceType interface)
+int CObjectManager::CountObjectsImplementing(ObjectInterfaceType interfaceType)
 {
     int count = 0;
     for (CObject* object : GetAllObjects())
     {
-        if (object->Implements(interface))
+        if (object->Implements(interfaceType))
             count++;
     }
     return count;
