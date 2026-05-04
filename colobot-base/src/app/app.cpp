@@ -19,6 +19,7 @@
 
 #include "app/app.h"
 
+#include "app/agent_server.h"
 #include "app/controller.h"
 #include "app/input.h"
 #include "app/modman.h"
@@ -219,7 +220,8 @@ ParseArgsStatus CApplication::ParseArguments(const std::vector<std::string>& arg
         OPT_HEADLESS,
         OPT_DEVICE,
         OPT_OPENGL_VERSION,
-        OPT_OPENGL_PROFILE
+        OPT_OPENGL_PROFILE,
+        OPT_AGENTSERVER
     };
 
     option options[] =
@@ -238,7 +240,8 @@ ParseArgsStatus CApplication::ParseArguments(const std::vector<std::string>& arg
         { "headless", no_argument, nullptr, OPT_HEADLESS },
         { "graphics", required_argument, nullptr, OPT_DEVICE },
         { "glversion", required_argument, nullptr, OPT_OPENGL_VERSION },
-        { "glprofile", required_argument, nullptr, OPT_OPENGL_PROFILE },
+        { "glprofile",    required_argument, nullptr, OPT_OPENGL_PROFILE },
+        { "agentserver",  optional_argument, nullptr, OPT_AGENTSERVER   },
         { nullptr, 0, nullptr, 0}
     };
 
@@ -295,6 +298,7 @@ ParseArgsStatus CApplication::ParseArguments(const std::vector<std::string>& arg
                 GetLogger()->Message("  -graphics           changes graphics device (one of: default, auto, opengl, gl14, gl21, gl33");
                 GetLogger()->Message("  -glversion          sets OpenGL context version to use (either default or version in format #.#)");
                 GetLogger()->Message("  -glprofile          sets OpenGL context profile to use (one of: default, core, compatibility, opengles)");
+                GetLogger()->Message("  -agentserver[=PORT] starts HTTP/JSON agent server on given port (default 7777)");
                 return PARSE_ARGS_HELP;
             }
             case OPT_DEBUG:
@@ -469,6 +473,14 @@ ParseArgsStatus CApplication::ParseArguments(const std::vector<std::string>& arg
                 }
                 break;
             }
+            case OPT_AGENTSERVER:
+            {
+                int port = 7777;
+                if (optarg != nullptr && *optarg != '\0')
+                    port = atoi(optarg);
+                m_agentServer = std::make_unique<CAgentServer>(port);
+                break;
+            }
             default:
                 assert(false); // should never get here
         }
@@ -560,7 +572,9 @@ bool CApplication::Create()
         return false;
     }
 
-    if (!m_headless)
+    // Agent server needs a GL context for rendering even in headless mode.
+    bool needsWindow = !m_headless || m_agentServer != nullptr;
+    if (needsWindow)
     {
         // load settings from profile
         std::string sValue;
@@ -702,6 +716,9 @@ bool CApplication::Create()
         m_controller->StartGame(m_runSceneCategory, m_runSceneRank/100, m_runSceneRank%100);
     }
 
+    if (m_agentServer)
+        m_agentServer->Start(m_engine.get(), m_eventQueue.get());
+
     return true;
 }
 
@@ -717,6 +734,9 @@ void CApplication::ReloadResources()
 bool CApplication::CreateVideoSurface()
 {
     Uint32 videoFlags = SDL_WINDOW_OPENGL;
+
+    if (m_headless)
+        videoFlags |= SDL_WINDOW_HIDDEN;  // agent server in headless: GL context without visible window
 
     if (m_deviceConfig->fullScreen)
         videoFlags |= SDL_WINDOW_FULLSCREEN;
@@ -818,8 +838,9 @@ bool CApplication::CreateVideoSurface()
     }
 
     /* If hardware acceleration specifically requested, this will force the hw accel
-       and fail with error if not available */
-    if (m_deviceConfig->hardwareAccel)
+       and fail with error if not available. Skip in headless mode to allow
+       software renderers (llvmpipe) for CI/CD pipelines. */
+    if (m_deviceConfig->hardwareAccel && !m_headless)
         SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
 
     m_private->window = SDL_CreateWindow(m_windowTitle.c_str(),
@@ -1192,6 +1213,9 @@ int CApplication::Run()
 
             Render();
 
+            if (m_agentServer)
+                m_agentServer->DrainQueue();
+
             CProfiler::StopPerformanceCounter(PCNT_ALL);
         }
     }
@@ -1481,6 +1505,11 @@ void CApplication::Render()
     CProfiler::StartPerformanceCounter(PCNT_RENDER_ALL);
     m_engine->Render();
     CProfiler::StopPerformanceCounter(PCNT_RENDER_ALL);
+
+    // Capture the framebuffer for any pending screenshot request BEFORE the swap.
+    // After SDL_GL_SwapWindow the backbuffer contents are undefined.
+    if (m_agentServer)
+        m_agentServer->CaptureFrameIfPending(m_device.get(), m_deviceConfig->size);
 
     CProfiler::StartPerformanceCounter(PCNT_SWAP_BUFFERS);
     if (m_deviceConfig->doubleBuf)

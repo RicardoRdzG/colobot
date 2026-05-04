@@ -1,0 +1,73 @@
+name: Agent Server Tests
+
+on:
+  push:
+    branches: [dev, 'claude/**']
+  pull_request:
+    branches: [dev]
+
+jobs:
+  agent-server-linux:
+    name: Agent server tests (Linux/Xvfb/llvmpipe)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build git \
+            libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev \
+            libsndfile1-dev libvorbis-dev libogg-dev libpng-dev \
+            libglew-dev libopenal-dev libphysfs-dev \
+            gettext po4a libglm-dev \
+            xvfb mesa-utils libgl1-mesa-dri \
+            curl python3 python3-pip
+
+      - name: Install Python test dependencies
+        run: pip install pytest requests pillow
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCOLOBOT_DEVELOPMENT_MODE=ON \
+            -DTESTS=OFF \
+            -G Ninja
+
+      - name: Build
+        run: cmake --build build --target colobot -j$(nproc)
+
+      - name: Copy shaders
+        run: cmake --build build --target UpdateShaders
+
+      - name: Start Xvfb
+        run: |
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> "$GITHUB_ENV"
+          sleep 1
+
+      - name: Run agent server tests
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GALLIUM_DRIVER: llvmpipe
+        run: |
+          pytest tests/agent/ -v \
+            --colobot-bin=build/colobot \
+            --colobot-datadir=build/data \
+            --tb=short \
+            -m "not os_screenshot"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-screenshots
+          path: |
+            tests/agent/snapshots/*.png
+            tests/agent/snapshots/*.actual.png
+          if-no-files-found: ignore

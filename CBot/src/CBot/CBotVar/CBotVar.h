@@ -244,6 +244,7 @@ public:
         UNDEF = 0,      //!< the variable value is currently not defined
         DEF = 1,        //!< the variable value is defined
         IS_POINTER = 2, //!< the variable value is as a pointer
+        NAN_INT = 3,    //!< integer variable explicitly assigned a NaN float value
     };
 
     /**
