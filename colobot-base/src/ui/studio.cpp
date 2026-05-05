@@ -1235,12 +1235,12 @@ void CStudio::UpdateButtons()
 glm::vec2 CStudio::ClampWindowBounds(glm::vec2 position, glm::vec2 dimension)
 {
     glm::vec2 result = position;
-    
+
     if (result.x < 0.0f) result.x = 0.0f;
     if (result.y < 0.0f) result.y = 0.0f;
     if (result.x + dimension.x > 1.0f) result.x = 1.0f - dimension.x;
     if (result.y + dimension.y > 1.0f) result.y = 1.0f - dimension.y;
-    
+
     return result;
 }
 

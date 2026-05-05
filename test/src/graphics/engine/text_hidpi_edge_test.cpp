@@ -20,7 +20,7 @@
 /**
  * \file test/src/graphics/engine/text_hidpi_edge_test.cpp
  * \brief Edge case tests for HiDPI text rendering
- * 
+ *
  * Tests edge cases and error conditions for:
  * - Commit c790fe49a: Fix small font in HiRes displays (GetNextTilePos guard)
  * - Commit 90d37119e: Use dynamic font texture size
@@ -81,7 +81,7 @@ void CTextHiDPIEdgeTest::TearDown()
 /**
  * \test GetNextTilePos_ZeroTileSize_HandledGracefully
  * \brief Tests that zero tile size doesn't crash
- * 
+ *
  * Edge case: tileSize of (0, 0) should not cause division by zero
  * or other crashes. The std::max(1, ...) guards should prevent this.
  */
@@ -92,10 +92,10 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_ZeroTileSize_HandledGracefully)
     ft.tileSize = {0, 0};  // Invalid size
     ft.textureSize = {256, 256};
     ft.freeSlots = 0;
-    
+
     // Should not crash
     auto result = m_text->GetNextTilePosForTest(ft);
-    
+
     // Result should be (0, 0) with the guards
     EXPECT_EQ(result.x, 0);
     EXPECT_EQ(result.y, 0);
@@ -104,7 +104,7 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_ZeroTileSize_HandledGracefully)
 /**
  * \test GetNextTilePos_ZeroTextureSize_HandledGracefully
  * \brief Tests that zero texture size doesn't crash
- * 
+ *
  * Edge case: Texture size of (0, 0) should not cause division by zero.
  */
 TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_ZeroTextureSize_HandledGracefully)
@@ -114,10 +114,10 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_ZeroTextureSize_HandledGracefully)
     ft.tileSize = {64, 64};
     ft.textureSize = {0, 0};  // Invalid size
     ft.freeSlots = 0;
-    
+
     // Should not crash
     auto result = m_text->GetNextTilePosForTest(ft);
-    
+
     // Result should be (0, 0) with the guards
     EXPECT_EQ(result.x, 0);
     EXPECT_EQ(result.y, 0);
@@ -148,7 +148,7 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_NegativeTileSize_HandledGracefully)
 /**
  * \test GetNextTilePos_NegativeTextureSize_HandledGracefully
  * \brief Tests that negative texture size doesn't crash
- * 
+ *
  * Edge case: Negative texture size should not cause crashes.
  */
 TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_NegativeTextureSize_HandledGracefully)
@@ -158,10 +158,10 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_NegativeTextureSize_HandledGracefully)
     ft.tileSize = {64, 64};
     ft.textureSize = {-256, -256};  // Invalid negative size
     ft.freeSlots = 0;
-    
+
     // Should not crash
     auto result = m_text->GetNextTilePosForTest(ft);
-    
+
     // Should produce valid result (or 0,0)
     EXPECT_GE(result.x, 0);
     EXPECT_GE(result.y, 0);
@@ -170,7 +170,7 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_NegativeTextureSize_HandledGracefully)
 /**
  * \test GetNextTilePos_VeryLargeTileSize_HandledGracefully
  * \brief Tests very large tile size relative to texture
- * 
+ *
  * Edge case: Tile size larger than texture should not crash.
  * This tests the fix from commit c790fe49a.
  */
@@ -181,10 +181,10 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_VeryLargeTileSize_HandledGracefully)
     ft.tileSize = {10000, 10000};  // Much larger than texture
     ft.textureSize = {256, 256};
     ft.freeSlots = 0;
-    
+
     // Should not crash - this is the original bug fix
     auto result = m_text->GetNextTilePosForTest(ft);
-    
+
     EXPECT_EQ(result.x, 0);
     EXPECT_EQ(result.y, 0);
 }
@@ -200,10 +200,10 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_AsymmetricSizes_HandledGracefully)
     ft.tileSize = {64, 128};  // Tall tile
     ft.textureSize = {1024, 256};  // Wide texture
     ft.freeSlots = 0;  // First tile
-    
+
     // Should not crash
     auto result = m_text->GetNextTilePosForTest(ft);
-    
+
     // With 1024x256 texture and 64x128 tiles:
     // horizontalTiles = 1024/64 = 16, verticalTiles = 256/128 = 2
     // totalTiles = 16*2 = 32, tileNumber = 32 - 0 = 32
@@ -217,7 +217,7 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_AsymmetricSizes_HandledGracefully)
 /**
  * \test GetNextTilePos_MaxTextureSize_2048
  * \brief Tests with maximum texture size (2048x2048)
- * 
+ *
  * Commit 90d37119e caps texture size at 2048.
  */
 TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_MaxTextureSize_2048)
@@ -227,17 +227,17 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_MaxTextureSize_2048)
     ft.tileSize = {64, 64};  // 32x32 = 1024 tiles
     ft.textureSize = {2048, 2048};
     ft.freeSlots = 1024;  // First tile (totalTiles - freeSlots = 1024 - 1024 = 0)
-    
+
     auto result = m_text->GetNextTilePosForTest(ft);
-    
+
     // First tile should be at (0, 0)
     EXPECT_EQ(result.x, 0);
     EXPECT_EQ(result.y, 0);
-    
+
     // Test last tile
     ft.freeSlots = 1;  // Last tile (1024 - 1 = 1023)
     result = m_text->GetNextTilePosForTest(ft);
-    
+
     // With 2048x2048 and 64x64 tiles: 32x32 grid
     // Tile 1023: row = 1023/32 = 31, col = 1023%32 = 31
     // Position: (31*64, 31*64) = (1984, 1984)
@@ -259,14 +259,13 @@ public:
     CEngineWrapper(CApplication* app, CSystemUtils* systemUtils)
         : CEngine(app, systemUtils)
     {}
-    
+
     MouseScaleData CalculateMouseScaleForTest(
         glm::ivec2 windowSize,
-        glm::ivec2 baseMouseSize,
         glm::ivec2 hotPoint
     )
     {
-        return CalculateMouseScale(windowSize, baseMouseSize, hotPoint);
+        return CalculateMouseScale(windowSize, hotPoint);
     }
 };
 
@@ -316,12 +315,11 @@ void CEngineHiDPIEdgeTest::TearDown()
 TEST_F(CEngineHiDPIEdgeTest, CalculateMouseScale_ZeroWindowSize_Returns1_0)
 {
     glm::ivec2 windowSize(0, 0);
-    glm::ivec2 baseMouseSize(32, 32);
     glm::ivec2 hotPoint(8, 8);
-    
+
     // Should not crash, should clamp to 1.0
-    auto result = m_engine->CalculateMouseScaleForTest(windowSize, baseMouseSize, hotPoint);
-    
+    auto result = m_engine->CalculateMouseScaleForTest(windowSize, hotPoint);
+
     // Length of (0,0) is 0, so scale = 0 / 1000 = 0, clamped to 1.0
     EXPECT_FLOAT_EQ(result.scale, 1.0f);
     EXPECT_EQ(result.scaledSize.x, 32);
@@ -335,12 +333,11 @@ TEST_F(CEngineHiDPIEdgeTest, CalculateMouseScale_ZeroWindowSize_Returns1_0)
 TEST_F(CEngineHiDPIEdgeTest, CalculateMouseScale_NegativeWindowSize_Returns1_0)
 {
     glm::ivec2 windowSize(-800, -600);
-    glm::ivec2 baseMouseSize(32, 32);
     glm::ivec2 hotPoint(8, 8);
-    
+
     // Should not crash
-    auto result = m_engine->CalculateMouseScaleForTest(windowSize, baseMouseSize, hotPoint);
-    
+    auto result = m_engine->CalculateMouseScaleForTest(windowSize, hotPoint);
+
     // Length of negative vector is positive, so scale will be positive
     // length(-800,-600) = length(800,600) = 1000, so scale = 1000/1000 = 1.0
     EXPECT_FLOAT_EQ(result.scale, 1.0f);
@@ -353,11 +350,10 @@ TEST_F(CEngineHiDPIEdgeTest, CalculateMouseScale_NegativeWindowSize_Returns1_0)
 TEST_F(CEngineHiDPIEdgeTest, CalculateMouseScale_ZeroHotPoint_ReturnsZeroOffset)
 {
     glm::ivec2 windowSize(1600, 1200);
-    glm::ivec2 baseMouseSize(32, 32);
     glm::ivec2 hotPoint(0, 0);  // Zero hot point
-    
-    auto result = m_engine->CalculateMouseScaleForTest(windowSize, baseMouseSize, hotPoint);
-    
+
+    auto result = m_engine->CalculateMouseScaleForTest(windowSize, hotPoint);
+
     EXPECT_FLOAT_EQ(result.scale, 2.0f);
     EXPECT_EQ(result.scaledHotPoint.x, 0);
     EXPECT_EQ(result.scaledHotPoint.y, 0);
@@ -370,14 +366,14 @@ TEST_F(CEngineHiDPIEdgeTest, CalculateMouseScale_ZeroHotPoint_ReturnsZeroOffset)
 TEST_F(CEngineHiDPIEdgeTest, CalculateMouseScale_ZeroBaseMouseSize_ReturnsZeroSize)
 {
     glm::ivec2 windowSize(1600, 1200);
-    glm::ivec2 baseMouseSize(0, 0);  // Zero size
     glm::ivec2 hotPoint(8, 8);
-    
-    auto result = m_engine->CalculateMouseScaleForTest(windowSize, baseMouseSize, hotPoint);
-    
+
+    auto result = m_engine->CalculateMouseScaleForTest(windowSize, hotPoint);
+
     EXPECT_FLOAT_EQ(result.scale, 2.0f);
-    EXPECT_EQ(result.scaledSize.x, 0);
-    EXPECT_EQ(result.scaledSize.y, 0);
+    // MOUSE_SIZE is now always 32x32 inside CalculateMouseScale
+    EXPECT_EQ(result.scaledSize.x, 64);
+    EXPECT_EQ(result.scaledSize.y, 64);
 }
 
 /**
@@ -387,15 +383,14 @@ TEST_F(CEngineHiDPIEdgeTest, CalculateMouseScale_ZeroBaseMouseSize_ReturnsZeroSi
 TEST_F(CEngineHiDPIEdgeTest, CalculateMouseScale_VeryLargeWindowSize_ClampedReasonably)
 {
     glm::ivec2 windowSize(7680, 4320);  // 8K resolution
-    glm::ivec2 baseMouseSize(32, 32);
     glm::ivec2 hotPoint(8, 8);
-    
-    auto result = m_engine->CalculateMouseScaleForTest(windowSize, baseMouseSize, hotPoint);
-    
+
+    auto result = m_engine->CalculateMouseScaleForTest(windowSize, hotPoint);
+
     // Scale should be around 8.8 for 8K
     float expectedScale = std::sqrt(7680*7680 + 4320*4320) / std::sqrt(800*800 + 600*600);
     EXPECT_NEAR(result.scale, expectedScale, 0.01f);
-    
+
     // Mouse should scale proportionally but remain usable
     EXPECT_GT(result.scaledSize.x, 32);
     EXPECT_GT(result.scaledSize.y, 32);

@@ -20,7 +20,7 @@
 /**
  * \file test/src/graphics/engine/text_atlas_sizing_test.cpp
  * \brief Unit tests for per-atlas texture sizing in CText
- * 
+ *
  * Tests the implementation from Phase 1 of CJK font support:
  * - FontTexture struct with textureSize field
  * - Per-atlas sizing logic in GetNextTilePos()
@@ -80,18 +80,18 @@ TEST_F(CTextAtlasSizingTest, GetNextTilePos_UsesAtlasTextureSize)
     ft.tileSize = {32, 32};
     ft.textureSize = {512, 512};  // Per-atlas size
     ft.freeSlots = 255;  // First tile
-    
+
     auto result = m_text->GetNextTilePosForTest(ft);
-    
+
     // With 512x512 and 32x32 tiles: 16x16 grid = 256 slots
     // First tile (tileNumber = 256 - 255 = 1): position (32, 0)
     EXPECT_EQ(result.x, 32);
     EXPECT_EQ(result.y, 0);
-    
+
     // Test second tile
     ft.freeSlots = 254;  // Tile 2
     result = m_text->GetNextTilePosForTest(ft);
-    
+
     // Tile 2: row 0, column 2 -> (64, 0)
     EXPECT_EQ(result.x, 64);
     EXPECT_EQ(result.y, 0);
@@ -109,18 +109,18 @@ TEST_F(CTextAtlasSizingTest, GetNextTilePos_DifferentAtlasSizes)
     smallAtlas.tileSize = {16, 16};
     smallAtlas.textureSize = {256, 256};  // 16x16 grid = 256 slots
     smallAtlas.freeSlots = 255;
-    
+
     auto result = m_text->GetNextTilePosForTest(smallAtlas);
     EXPECT_EQ(result.x, 16);
     EXPECT_EQ(result.y, 0);
-    
+
     // Large atlas: 1024x1024 with 64x64 tiles
     FontTexture largeAtlas;
     largeAtlas.id = 2;
     largeAtlas.tileSize = {64, 64};
     largeAtlas.textureSize = {1024, 1024};  // 16x16 grid = 256 slots
     largeAtlas.freeSlots = 255;
-    
+
     result = m_text->GetNextTilePosForTest(largeAtlas);
     EXPECT_EQ(result.x, 64);
     EXPECT_EQ(result.y, 0);
@@ -137,17 +137,17 @@ TEST_F(CTextAtlasSizingTest, GetNextTilePos_MaxAtlasSize_2048)
     ft.tileSize = {64, 64};
     ft.textureSize = {2048, 2048};  // 32x32 grid = 1024 slots
     ft.freeSlots = 1024;  // All slots free, first tile (tileNumber = 0)
-    
+
     auto result = m_text->GetNextTilePosForTest(ft);
-    
+
     // First tile: position (0, 0)
     EXPECT_EQ(result.x, 0);
     EXPECT_EQ(result.y, 0);
-    
+
     // Test last valid tile position
     ft.freeSlots = 1;  // Last slot (tileNumber = 1024 - 1 = 1023)
     result = m_text->GetNextTilePosForTest(ft);
-    
+
     // With 2048x2048 and 64x64 tiles: 32x32 grid
     // Tile 1023: row 31, column 31 -> (31*64, 31*64) = (1984, 1984)
     EXPECT_EQ(result.x, 1984);
@@ -165,11 +165,11 @@ TEST_F(CTextAtlasSizingTest, GetNextTilePos_EdgeCase_TileLargerThanAtlas)
     ft.tileSize = {512, 512};  // Larger than atlas
     ft.textureSize = {256, 256};
     ft.freeSlots = 0;
-    
+
     // Should not crash, but result is undefined behavior
     // The calculation will produce invalid values
     auto result = m_text->GetNextTilePosForTest(ft);
-    
+
     // Just verify it doesn't crash
     // Result is undefined when tile doesn't fit
 }
@@ -187,10 +187,10 @@ TEST_F(CTextAtlasSizingTest, PackTileSize_BasicPacking)
     // Test basic packing: x in high 32 bits, y in low 32 bits
     auto key1 = CTextWrapper::PackTileSizeForTest({16, 32});
     auto key2 = CTextWrapper::PackTileSizeForTest({32, 16});
-    
+
     // Different tile sizes should produce different keys
     EXPECT_NE(key1, key2);
-    
+
     // Same values should produce same key
     auto key3 = CTextWrapper::PackTileSizeForTest({16, 32});
     EXPECT_EQ(key1, key3);
@@ -206,12 +206,12 @@ TEST_F(CTextAtlasSizingTest, PackTileSize_LargeValues)
     auto key256 = CTextWrapper::PackTileSizeForTest({256, 256});
     auto key512 = CTextWrapper::PackTileSizeForTest({512, 512});
     auto key1024 = CTextWrapper::PackTileSizeForTest({1024, 1024});
-    
+
     // All should be different
     EXPECT_NE(key256, key512);
     EXPECT_NE(key512, key1024);
     EXPECT_NE(key256, key1024);
-    
+
     // Verify bit packing: high 32 bits = x, low 32 bits = y
     // For 256x256: key should have 256 in both halves
     uint32_t high = static_cast<uint32_t>(key256 >> 32);

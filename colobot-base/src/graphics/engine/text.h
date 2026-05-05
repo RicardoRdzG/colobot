@@ -170,7 +170,8 @@ struct CharTexture
     unsigned int id = 0;
     glm::ivec2 charPos;
     glm::ivec2 charSize;
-    glm::ivec2 atlasSize;  //!< Size of the atlas this character is in (must never be zero for valid characters)
+    glm::ivec2 atlasSize = {};
+    //!< Size of the atlas this glyph was baked into; stored here so UV calc doesn't need to look up the atlas at draw time.
 };
 
 /**
@@ -185,7 +186,7 @@ struct CharTexture
 struct FontTexture
 {
     unsigned int id = 0;                //!< OpenGL texture ID
-    glm::ivec2 tileSize;                 //!< Size of each character tile in pixels
+    glm::ivec2 tileSize = {};            //!< Size of each character tile in pixels
     glm::ivec2 textureSize = glm::ivec2(0, 0);  //!< Size of the texture atlas in pixels
     int freeSlots = 0;                  //!< Number of available slots remaining
 };

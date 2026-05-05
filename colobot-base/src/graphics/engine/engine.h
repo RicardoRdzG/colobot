@@ -1041,7 +1041,6 @@ protected:
     //! Calculate mouse scaling for HiDPI displays (extracted for testability)
     MouseScaleData CalculateMouseScale(
         glm::ivec2 windowSize,
-        glm::ivec2 baseMouseSize,
         glm::ivec2 hotPoint
     ) const;
 
