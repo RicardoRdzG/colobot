@@ -27,6 +27,11 @@ add_executable(Colobot-UnitTests
     src/math/geometry_test.cpp
     src/math/matrix_test.cpp
     src/math/vector_test.cpp
+
+    src/graphics/engine/text_hidpi_test.cpp
+    src/graphics/engine/engine_hidpi_test.cpp
+    src/graphics/engine/text_hidpi_edge_test.cpp
+    src/graphics/engine/text_atlas_sizing_test.cpp
 )
 
 target_include_directories(Colobot-UnitTests PRIVATE

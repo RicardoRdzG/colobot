@@ -30,6 +30,7 @@
 #include <map>
 #include <memory>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -169,13 +170,30 @@ struct CharTexture
     unsigned int id = 0;
     glm::ivec2 charPos;
     glm::ivec2 charSize;
+    glm::ivec2 atlasSize;  //!< Size of the atlas this character is in (must never be zero for valid characters)
+};
+
+/**
+ * \struct FontTexture
+ * \brief Single texture atlas filled with character tiles
+ *
+ * Each FontTexture represents one texture atlas that stores rendered character glyphs.
+ * Multiple atlases may exist for different tile sizes (e.g., different font sizes).
+ * Each atlas has its own independent size, allowing CJK fonts to use larger atlases
+ * while Latin fonts use smaller ones.
+ */
+struct FontTexture
+{
+    unsigned int id = 0;                //!< OpenGL texture ID
+    glm::ivec2 tileSize;                 //!< Size of each character tile in pixels
+    glm::ivec2 textureSize = glm::ivec2(0, 0);  //!< Size of the texture atlas in pixels
+    int freeSlots = 0;                  //!< Number of available slots remaining
 };
 
 // Definition is private - in text.cpp
 class FontsCache;
 struct CachedFont;
 struct MultisizeFont;
-struct FontTexture;
 
 /**
  * \enum SpecialChar
@@ -289,16 +307,39 @@ public:
     StrUtils::CodePoint TranslateSpecialChar(char32_t specialChar);
 
     CharTexture GetCharTexture(StrUtils::CodePoint ch, FontType font, float size);
-    glm::ivec2 GetFontTextureSize();
 
 protected:
     int         GetFontPointSize(float size) const;
     CachedFont* GetOrOpenFont(FontType type, float size);
-    void        ResizeFontTexture();
-    void        ResizeFontTexture(FontType font, float size, CachedFont *&cf);
+     
     CharTexture CreateCharTexture(StrUtils::CodePoint ch, CachedFont* font);
+    
+    /**
+     * \brief Find or create a FontTexture atlas for the given tile size
+     * \param tileSize The required tile size in pixels
+     * \return Pointer to existing or new FontTexture, or nullptr on failure
+     *
+     * Searches for an existing atlas with matching tile size that has free slots.
+     * If none found, creates a new atlas with appropriate initial size.
+     */
     FontTexture* GetOrCreateFontTexture(const glm::ivec2& tileSize);
+    
+    /**
+     * \brief Create a new font atlas with calculated initial size
+     * \param tileSize The tile size for this atlas
+     * \return New FontTexture with initialized atlas
+     *
+     * Calculates initial size as NextPowerOfTwo(tileSize * 16), clamped to 256-2048.
+     */
     FontTexture CreateFontTexture(const glm::ivec2& tileSize);
+    
+    /**
+     * \brief Calculate next available tile position in an atlas
+     * \param fontTexture The atlas to get position from
+     * \return Position in pixels for the next tile
+     *
+     * Uses per-atlas textureSize for coordinate calculation.
+     */
     glm::ivec2  GetNextTilePos(const FontTexture& fontTexture);
 
     void        DrawString(const std::string &text, std::vector<FontMetaChar>::iterator format,
@@ -322,14 +363,24 @@ protected:
     int          m_tabSize;
 
     std::unique_ptr<FontsCache> m_fontsCache;
-    std::vector<FontTexture> m_fontTextures;
+    
+    /**
+     * \brief Atlas lookup by tile size
+     * Key: packed 64-bit tileSize (high 32 bits = x, low 32 bits = y)
+     * Value: list of atlases with that tile size (newest at back)
+     */
+    std::unordered_map<uint64_t, std::vector<FontTexture>> m_fontTextureMap;
+    
+    /**
+     * \brief Pack tileSize into 64-bit key for hash map lookup
+     */
+    static uint64_t PackTileSize(const glm::ivec2& tileSize)
+    {
+        return (static_cast<uint64_t>(tileSize.x) << 32) | static_cast<uint64_t>(tileSize.y);
+    }
 
     class CQuadBatch;
     std::unique_ptr<CQuadBatch> m_quadBatch;
-
-    glm::ivec2   m_fontTextureSize;
-    // Signal that texture resize is needed (set by CreateCharTexture, handled by GetCharTexture)
-    glm::ivec2   m_requiredFontTextureSize;
 };
 
 

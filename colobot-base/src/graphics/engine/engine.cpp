@@ -157,8 +157,6 @@ struct EngineMouse
 };
 
 constexpr glm::ivec2 MOUSE_SIZE(32, 32);
-// Reference size for Hires scaling (same as font reference)
-constexpr glm::ivec2 REFERENCE_SIZE(800, 600);
 
 const std::map<EngineMouseType, EngineMouse> MOUSE_TYPES = {
     {{ENG_MOUSE_NORM},    {EngineMouse( 0,  1, 32, TransparencyMode::WHITE, TransparencyMode::BLACK, glm::ivec2( 1,  1))}},
@@ -4588,39 +4586,70 @@ void CEngine::DrawMouse()
 
     SetWindowCoordinates();
 
-    // Calculate scale factor based on window size (same pattern as font scaling)
-    float scale = glm::length(glm::vec2(m_size)) / glm::length(glm::vec2(REFERENCE_SIZE));
-    // Prevent cursor from becoming smaller than base size
-    scale = std::max(scale, 1.0f);
-    // Scale mouse size for Hi Res displays
-    glm::ivec2 scaledMouseSize = glm::ivec2(MOUSE_SIZE.x * scale, MOUSE_SIZE.y * scale);
-
+    // Get mouse position
     glm::vec2 mousePos = CInput::GetInstancePointer()->GetMousePos();
     glm::ivec2 pos(mousePos.x * m_size.x, m_size.y - mousePos.y * m_size.y);
-
-    // Scale hotPoint to maintain correct cursor positioning
-    glm::ivec2 scaledHotPoint = glm::ivec2(
-        static_cast<int>(MOUSE_TYPES.at(m_mouseType).hotPoint.x * scale),
-        static_cast<int>(MOUSE_TYPES.at(m_mouseType).hotPoint.y * scale)
+    
+    // Calculate mouse scaling using extracted helper
+    MouseScaleData scaleData = CalculateMouseScale(
+        m_size,
+        MOUSE_SIZE,
+        MOUSE_TYPES.at(m_mouseType).hotPoint
     );
-    pos.x -= scaledHotPoint.x;
-    pos.y -= scaledHotPoint.y;
-
-    // Scale shadow offset
+    
+    // Adjust position by scaled hot point
+    pos.x -= scaleData.scaledHotPoint.x;
+    pos.y -= scaleData.scaledHotPoint.y;
+    
+    // Calculate shadow position with scaled offset
     glm::ivec2 shadowPos = {
-        pos.x + static_cast<int>(4 * scale),
-        pos.y - static_cast<int>(3 * scale)
+        pos.x + scaleData.shadowOffset.x,
+        pos.y - scaleData.shadowOffset.y
     };
 
     auto renderer = m_device->GetUIRenderer();
     renderer->SetTexture(m_miceTexture);
 
     // Draw with scaled size for HiRes displays
-    DrawMouseSprite(shadowPos, scaledMouseSize, MOUSE_TYPES.at(m_mouseType).iconShadow, TransparencyMode::WHITE);
-    DrawMouseSprite(pos, scaledMouseSize, MOUSE_TYPES.at(m_mouseType).icon1, MOUSE_TYPES.at(m_mouseType).mode1);
-    DrawMouseSprite(pos, scaledMouseSize, MOUSE_TYPES.at(m_mouseType).icon2, MOUSE_TYPES.at(m_mouseType).mode2);
+    DrawMouseSprite(shadowPos, scaleData.scaledSize, MOUSE_TYPES.at(m_mouseType).iconShadow, TransparencyMode::WHITE);
+    DrawMouseSprite(pos, scaleData.scaledSize, MOUSE_TYPES.at(m_mouseType).icon1, MOUSE_TYPES.at(m_mouseType).mode1);
+    DrawMouseSprite(pos, scaleData.scaledSize, MOUSE_TYPES.at(m_mouseType).icon2, MOUSE_TYPES.at(m_mouseType).mode2);
 
     SetInterfaceCoordinates();
+}
+
+CEngine::MouseScaleData CEngine::CalculateMouseScale(
+    glm::ivec2 windowSize,
+    glm::ivec2 baseMouseSize,
+    glm::ivec2 hotPoint
+) const
+{
+    MouseScaleData result;
+    
+    // Calculate scale factor based on window size (same pattern as font scaling)
+    result.scale = glm::length(glm::vec2(windowSize)) / glm::length(glm::vec2(REFERENCE_SIZE));
+    // Prevent cursor from becoming smaller than base size
+    result.scale = std::max(result.scale, 1.0f);
+    
+    // Scale mouse size for Hi Res displays
+    result.scaledSize = glm::ivec2(
+        baseMouseSize.x * result.scale,
+        baseMouseSize.y * result.scale
+    );
+    
+    // Scale hotPoint to maintain correct cursor positioning
+    result.scaledHotPoint = glm::ivec2(
+        static_cast<int>(hotPoint.x * result.scale),
+        static_cast<int>(hotPoint.y * result.scale)
+    );
+    
+    // Scale shadow offset
+    result.shadowOffset = glm::ivec2(
+        static_cast<int>(4 * result.scale),
+        static_cast<int>(3 * result.scale)
+    );
+    
+    return result;
 }
 
 void CEngine::DrawMouseSprite(const glm::ivec2& pos, const glm::ivec2& size, int icon, TransparencyMode mode)

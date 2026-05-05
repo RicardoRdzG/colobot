@@ -3326,11 +3326,10 @@ void CParticle::DrawParticleText(int i)
     m_renderer->SetColor(IntensityToColor(m_particle[i].intensity));
     m_renderer->SetTransparency(TransparencyMode::ALPHA);
 
-    glm::ivec2 fontTextureSize = m_engine->GetText()->GetFontTextureSize();
-    m_particle[i].texSup.x = static_cast<float>(tex.charPos.x) / fontTextureSize.x;
-    m_particle[i].texSup.y = static_cast<float>(tex.charPos.y) / fontTextureSize.y;
-    m_particle[i].texInf.x = static_cast<float>(tex.charPos.x + tex.charSize.x) / fontTextureSize.x;
-    m_particle[i].texInf.y = static_cast<float>(tex.charPos.y + tex.charSize.y) / fontTextureSize.y;
+    m_particle[i].texSup.x = static_cast<float>(tex.charPos.x) / tex.atlasSize.x;
+    m_particle[i].texSup.y = static_cast<float>(tex.charPos.y) / tex.atlasSize.y;
+    m_particle[i].texInf.x = static_cast<float>(tex.charPos.x + tex.charSize.x) / tex.atlasSize.x;
+    m_particle[i].texInf.y = static_cast<float>(tex.charPos.y + tex.charSize.y) / tex.atlasSize.y;
     m_particle[i].color = Color(0.0f, 0.0f, 0.0f, 1.0f);
 
     DrawParticleNorm(i);

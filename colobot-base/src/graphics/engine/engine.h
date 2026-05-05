@@ -56,6 +56,9 @@ struct Event;
 namespace Gfx
 {
 
+// Reference size for HiDPI scaling (same as font reference)
+constexpr glm::ivec2 REFERENCE_SIZE(800, 600);
+
 class CDevice;
 class CUIRenderer;
 class CObjectRenderer;
@@ -1025,6 +1028,23 @@ protected:
     void        DrawMouse();
     //! Draw part of mouse cursor sprite
     void        DrawMouseSprite(const glm::ivec2& pos, const glm::ivec2& size, int icon, TransparencyMode mode);
+    
+    //! Mouse scaling data for HiDPI displays
+    struct MouseScaleData
+    {
+        float scale;
+        glm::ivec2 scaledSize;
+        glm::ivec2 scaledHotPoint;
+        glm::ivec2 shadowOffset;
+    };
+    
+    //! Calculate mouse scaling for HiDPI displays (extracted for testability)
+    MouseScaleData CalculateMouseScale(
+        glm::ivec2 windowSize,
+        glm::ivec2 baseMouseSize,
+        glm::ivec2 hotPoint
+    ) const;
+    
     //! Draw statistic texts
     void        DrawStats();
     //! Draw mission timer

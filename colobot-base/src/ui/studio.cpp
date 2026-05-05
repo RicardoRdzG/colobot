@@ -254,6 +254,13 @@ bool CStudio::EventProcess(const Event &event)
         m_editActualDim = m_editFinalDim = pw->GetDim();
         m_windowPos = m_editActualPos;
         m_windowDim = m_editActualDim;
+
+        // Clamp window position to keep it within screen bounds
+        m_windowPos = ClampWindowBounds(m_windowPos, m_windowDim);
+
+        m_editActualPos = m_editFinalPos = m_windowPos;
+        pw->SetPos(m_windowPos);
+
         AdjustEditScript();
     }
     if ( event.type == pw->GetEventTypeReduce() )
@@ -584,8 +591,15 @@ void CStudio::StartEditScript(CScript *script, std::string name, Program* progra
 
     m_dialogPos = m_settings->GetIOPos();
     m_dialogDim = m_settings->GetIODim();
+
+    // Validate dialog position is within screen bounds
+    m_dialogPos = ClampWindowBounds(m_dialogPos, m_dialogDim);
+
     m_windowPos = m_settings->GetWindowPos();
     m_windowDim = m_settings->GetWindowDim();
+
+    // Validate window position is within screen bounds
+    m_windowPos = ClampWindowBounds(m_windowPos, m_windowDim);
     m_bEditMaximized = m_settings->GetWindowMax();
 
     if ( m_bEditMaximized )
@@ -1113,7 +1127,10 @@ void CStudio::ViewEditScript()
     edit = static_cast< CEdit* >(pw->SearchControl(EVENT_STUDIO_EDIT));
     if ( edit == nullptr )  return;
 
-    edit->SetFontSize(m_settings->GetFontSize());
+    // After HiDPI fix (commit c790fe49a), font scaling is handled by CText
+    // so we don't need to scale here anymore
+    float fontScale = CalculateEditorFontScale(m_engine->GetWindowSize());
+    edit->SetFontSize(m_settings->GetFontSize() * fontScale);
 }
 
 
@@ -1216,6 +1233,18 @@ void CStudio::UpdateButtons()
     button = static_cast< CButton* >(pw->SearchControl(EVENT_STUDIO_PASTE));
     if ( button == nullptr )  return;
     button->SetState(STATE_ENABLE, !m_program->readOnly);
+}
+
+glm::vec2 CStudio::ClampWindowBounds(glm::vec2 position, glm::vec2 dimension)
+{
+    glm::vec2 result = position;
+    
+    if (result.x < 0.0f) result.x = 0.0f;
+    if (result.y < 0.0f) result.y = 0.0f;
+    if (result.x + dimension.x > 1.0f) result.x = 1.0f - dimension.x;
+    if (result.y + dimension.y > 1.0f) result.y = 1.0f - dimension.y;
+    
+    return result;
 }
 
 } // namespace Ui
