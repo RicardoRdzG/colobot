@@ -1987,6 +1987,27 @@ TEST_F(CBotUT, StringArrayCharAccess)
     )");
 }
 
+TEST_F(CBotUT, StringPassedByValue)
+{
+    // s[n] write inside a called function must not affect the caller's copy
+    // (strings are value types, so the local copy is modified, not the original).
+    ExecuteTest(R"(
+        void ModifyString(string s)
+        {
+            ASSERT(s == "hola");
+            s[0] = "H";
+            ASSERT(s == "Hola");
+        }
+
+        extern void StringPassedByValue()
+        {
+            string a = "hola";
+            ModifyString(a);
+            ASSERT(a == "hola");
+        }
+    )");
+}
+
 TEST_F(CBotUT, ArraysOfStrings)
 {
     ExecuteTest(R"(
