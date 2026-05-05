@@ -191,6 +191,9 @@ public:
     //! Change the video mode to given mode
     bool        ChangeVideoConfig(const Gfx::DeviceConfig &newConfig, bool isSetSize);
 
+    //! Synchronize window size from SDL (handles maximized startup on Linux/Unix)
+    void        SyncWindowSize();
+
     //! Suspends animation (time will not be updated)
     void        SuspendSimulation();
     //! Resumes animation

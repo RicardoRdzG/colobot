@@ -889,6 +889,23 @@ bool CApplication::ChangeVideoConfig(const Gfx::DeviceConfig &newConfig, bool is
     return true;
 }
 
+void CApplication::SyncWindowSize()
+{
+    // Query actual window size and sync with config if different
+    // Handles maximized window startup on Linux/Unix systems
+    glm::ivec2 actualSize;
+    SDL_GetWindowSize(m_private->window, &actualSize.x, &actualSize.y);
+    if (actualSize != m_deviceConfig->size)
+    {
+        GetLogger()->Info("Window size adjusted from %%x%% to %%x%%",
+                        m_deviceConfig->size.x, m_deviceConfig->size.y,
+                        actualSize.x, actualSize.y);
+        Gfx::DeviceConfig newConfig = *m_deviceConfig;
+        newConfig.size = actualSize;
+        ChangeVideoConfig(newConfig, /* isSetSize */ false);
+    }
+}
+
 bool CApplication::OpenJoystick()
 {
     if ( (m_joystick.index < 0) || (m_joystick.index >= SDL_NumJoysticks()) )
@@ -1045,6 +1062,9 @@ int CApplication::Run()
     m_baseTimeStamp = TimeUtils::GetCurrentTimeStamp();
     m_lastTimeStamp = m_baseTimeStamp;
     m_curTimeStamp = m_baseTimeStamp;
+
+    // Query actual window size on startup (handles maximized windows properly)
+    SyncWindowSize();
 
     MoveMouse({ 0.5f, 0.5f }); // center mouse on start
 
