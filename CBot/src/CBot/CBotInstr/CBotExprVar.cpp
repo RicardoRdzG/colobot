@@ -23,6 +23,7 @@
 #include "CBot/CBotInstr/CBotExpression.h"
 #include "CBot/CBotInstr/CBotIndexExpr.h"
 #include "CBot/CBotInstr/CBotFieldExpr.h"
+#include "CBot/CBotInstr/CBotStringCharExpr.h"
 
 #include "CBot/CBotStack.h"
 #include "CBot/CBotCStack.h"
@@ -111,6 +112,28 @@ CBotInstr* CBotExprVar::Compile(CBotToken*& p, CBotCStack* pStack, bool bCheckRe
                             pStk->SetError(CBotErrCloseIndex, p->GetStart());
                             goto err;
                         }
+                        continue;
+                    }
+                }
+                if (var->GetType() == CBotTypString)
+                {
+                    if (IsOfType( p, ID_OPBRK ))    // string[n] character access
+                    {
+                        CBotStringCharExpr* i = new CBotStringCharExpr();
+                        i->m_expr = CBotExpression::Compile(p, pStk);
+                        inst->AddNext3(i);
+
+                        if (i->m_expr == nullptr)
+                        {
+                            pStk->SetError(CBotErrBadIndex, p->GetStart());
+                            goto err;
+                        }
+                        if (!pStk->IsOk() || !IsOfType( p, ID_CLBRK ))
+                        {
+                            pStk->SetError(CBotErrCloseIndex, p->GetStart());
+                            goto err;
+                        }
+                        // var stays as string — result type is string
                         continue;
                     }
                 }

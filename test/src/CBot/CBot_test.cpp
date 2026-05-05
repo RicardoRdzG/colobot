@@ -1442,8 +1442,7 @@ TEST_F(CBotUT, ClassMissingCloseBlock)
     );
 }
 
-// TODO: NOOOOOO!!! Nononononono :/
-TEST_F(CBotUT, DISABLED_PublicClasses)
+TEST_F(CBotUT, PublicClasses)
 {
     // Keep the program, so that the class continues to exist after ExecuteTest finishes
     auto publicProgram = ExecuteTest(R"(
@@ -1954,8 +1953,7 @@ TEST_F(CBotUT, StringEscapeCodeErrors)
     );
 }
 
-// TODO: not implemented, see issue #694
-TEST_F(CBotUT, DISABLED_StringAsArray)
+TEST_F(CBotUT, StringAsArray)
 {
     ExecuteTest(R"(
         extern void StringAsArray()
@@ -1965,6 +1963,47 @@ TEST_F(CBotUT, DISABLED_StringAsArray)
             ASSERT(s[3] == "o");
             s[2] = "L"; s[4] = "B"; s[6] = "T";
             ASSERT(s == "CoLoBoT");
+        }
+    )");
+}
+
+TEST_F(CBotUT, StringArrayCharAccess)
+{
+    // Verify that string[] array element access and string char access compose:
+    //   arr[n]    — returns the n-th string element (CBotTypString)
+    //   arr[n][m] — returns the m-th character of that element (CBotTypString, 1 char)
+    //   arr[n][m] = "x" — writes through both levels to the element in the array
+    ExecuteTest(R"(
+        extern void StringArrayCharAccess()
+        {
+            string[] a = {"abc", "xyz"};
+            ASSERT(a[0] == "abc");      // plain array element
+            ASSERT(a[1] == "xyz");
+            ASSERT(a[0][1] == "b");     // char of element
+            ASSERT(a[1][2] == "z");
+            a[0][1] = "B";              // write-through: char of element
+            ASSERT(a[0] == "aBc");      // element was modified in-place
+        }
+    )");
+}
+
+TEST_F(CBotUT, StringPassedByValue)
+{
+    // s[n] write inside a called function must not affect the caller's copy
+    // (strings are value types, so the local copy is modified, not the original).
+    ExecuteTest(R"(
+        void ModifyString(string s)
+        {
+            ASSERT(s == "hola");
+            s[0] = "H";
+            ASSERT(s == "Hola");
+        }
+
+        extern void StringPassedByValue()
+        {
+            string a = "hola";
+            ModifyString(a);
+            ASSERT(a == "hola");
         }
     )");
 }

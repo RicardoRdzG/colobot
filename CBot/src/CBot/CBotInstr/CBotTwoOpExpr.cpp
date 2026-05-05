@@ -311,6 +311,11 @@ static bool VarIsNAN(const CBotVar* var)
     if (var->GetType() == CBotTypDouble)
         return std::isnan(var->GetValDouble());
 
+    // Integer types: only NaN-assigned (InitType::NAN), not generic uninitialized (InitType::UNDEF).
+    CBotType t = var->GetType();
+    if (t == CBotTypInt || t == CBotTypByte || t == CBotTypShort || t == CBotTypLong)
+        return var->GetInit() == CBotVar::InitType::NAN_INT;
+
     return false;
 }
 

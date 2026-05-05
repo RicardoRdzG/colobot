@@ -260,10 +260,24 @@ CBotInstr* CBotInstr::Compile(CBotToken* &p, CBotCStack* pStack)
     CBotToken*    ppp = p;
     if (IsOfType(ppp, TokenTypVar))
     {
-        if (CBotClass::Find(p) != nullptr) // Does class with this name exist?
+        CBotClass* pClass = CBotClass::Find(p);
+        // Accept the class as a valid type if it is fully compiled (m_IsDef=true),
+        // OR if it is currently being compiled in the same program (m_IsDef=false
+        // during Step 2 / DefineClasses, where intra-program class references are
+        // valid).  Reject purged classes from previous programs that are no longer
+        // fully defined so that identifiers are not misidentified as class types.
+        if (pClass != nullptr)
         {
-            // Yes, compile the declaration of the instance
-            return CBotDefClass::Compile(p, pStack);
+            if (pClass->IsFullyDefined() ||
+                pStack->GetProgram()->ClassExists(pClass->GetName()))
+            {
+                // Yes, compile the declaration of the instance
+                return CBotDefClass::Compile(p, pStack);
+            }
+            // Class exists but its defining program was destroyed (purged).
+            // Report as an undefined class rather than an undefined variable.
+            pStack->SetError(CBotErrUndefClass, p);
+            return nullptr;
         }
     }
 
