@@ -311,9 +311,9 @@ public:
 protected:
     int         GetFontPointSize(float size) const;
     CachedFont* GetOrOpenFont(FontType type, float size);
-     
+
     CharTexture CreateCharTexture(StrUtils::CodePoint ch, CachedFont* font);
-    
+
     /**
      * \brief Find or create a FontTexture atlas for the given tile size
      * \param tileSize The required tile size in pixels
@@ -323,7 +323,7 @@ protected:
      * If none found, creates a new atlas with appropriate initial size.
      */
     FontTexture* GetOrCreateFontTexture(const glm::ivec2& tileSize);
-    
+
     /**
      * \brief Create a new font atlas with calculated initial size
      * \param tileSize The tile size for this atlas
@@ -332,7 +332,7 @@ protected:
      * Calculates initial size as NextPowerOfTwo(tileSize * 16), clamped to 256-2048.
      */
     FontTexture CreateFontTexture(const glm::ivec2& tileSize);
-    
+
     /**
      * \brief Calculate next available tile position in an atlas
      * \param fontTexture The atlas to get position from
@@ -363,14 +363,14 @@ protected:
     int          m_tabSize;
 
     std::unique_ptr<FontsCache> m_fontsCache;
-    
+
     /**
      * \brief Atlas lookup by tile size
      * Key: packed 64-bit tileSize (high 32 bits = x, low 32 bits = y)
      * Value: list of atlases with that tile size (newest at back)
      */
     std::unordered_map<uint64_t, std::vector<FontTexture>> m_fontTextureMap;
-    
+
     /**
      * \brief Pack tileSize into 64-bit key for hash map lookup
      */

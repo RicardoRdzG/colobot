@@ -44,8 +44,7 @@
  * See also: CApplicationWrapper in test/src/app/app_test.cpp
  */
 
-#include "graphics/engine/engine.h"
-#include "graphics/engine/text.h"
+#include "text_test_helpers.h"
 
 #include <gtest/gtest.h>
 #include <hippomocks.h>
@@ -54,27 +53,6 @@
 
 using namespace Gfx;
 using namespace HippoMocks;
-
-/**
- * \class CTextWrapper
- * \brief Wrapper exposing protected CText methods for testing
- * 
- * This wrapper inherits from CText and exposes protected methods
- * as public for testing purposes. This is the standard Colobot
- * pattern for testing protected methods.
- */
-class CTextWrapper : public CText
-{
-public:
-    explicit CTextWrapper(CEngine* engine)
-        : CText(engine)
-    {}
-    
-    glm::ivec2 GetNextTilePosForTest(const FontTexture& ft)
-    {
-        return GetNextTilePos(ft);
-    }
-};
 
 /**
  * \class CTextHiDPITest

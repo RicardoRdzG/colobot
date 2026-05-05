@@ -1127,10 +1127,7 @@ void CStudio::ViewEditScript()
     edit = static_cast< CEdit* >(pw->SearchControl(EVENT_STUDIO_EDIT));
     if ( edit == nullptr )  return;
 
-    // After HiDPI fix (commit c790fe49a), font scaling is handled by CText
-    // so we don't need to scale here anymore
-    float fontScale = CalculateEditorFontScale(m_engine->GetWindowSize());
-    edit->SetFontSize(m_settings->GetFontSize() * fontScale);
+    edit->SetFontSize(m_settings->GetFontSize());
 }
 
 

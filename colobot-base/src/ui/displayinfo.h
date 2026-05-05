@@ -68,13 +68,6 @@ protected:
     void        ViewDisplayInfo();
     CObject*    SearchToto();
     
-    //! Calculate font scale factor for editor (extracted for testability)
-    //! After HiDPI fix (commit c790fe49a), scaling is always 1.0 (no scaling)
-    float CalculateEditorFontScale(glm::ivec2 windowSize) const
-    {
-        return 1.0f;
-    }
-
 protected:
     Gfx::CEngine*       m_engine;
     CEventQueue*        m_event;

@@ -413,7 +413,7 @@ CText::~CText()
     {
         FlushCache();
     }
-    
+
     m_device = nullptr;
     m_engine = nullptr;
 }
@@ -486,7 +486,7 @@ void CText::FlushCache()
         }
     }
     m_fontTextureMap.clear();
-    
+
     // Flush font cache
     if (m_fontsCache != nullptr)
     {
@@ -1050,7 +1050,7 @@ void CText::StringToUTFCharList(std::string_view text, std::vector<StrUtils::Cod
         int len = StrUtils::UTF8CharLength(text);
 
         if (len == 0) break;
-        
+
         StrUtils::CodePoint ch = std::string_view(text.data(), len);
 
         chars.push_back(ch);
@@ -1227,7 +1227,7 @@ void CText::DrawCharAndAdjustPos(StrUtils::CodePoint ch, FontType font, float si
         }
 
         CharTexture tex = GetCharTexture(ch, font, size);
-        
+
         if (tex.id == 0)
         {
             return;
@@ -1262,13 +1262,13 @@ int CText::GetFontPointSize(float size) const
     glm::ivec2 windowSize = m_engine->GetWindowSize();
     float windowLength = glm::length(glm::vec2(windowSize));
     float refLength = glm::length(glm::vec2(Gfx::REFERENCE_SIZE));
-    
+
     // Guard against division by zero if window size is not yet initialized
     if (windowLength < 1.0f)
     {
         return static_cast<int>(size);
     }
-    
+
     return static_cast<int>(size * (windowLength / refLength));
 }
 
@@ -1300,7 +1300,7 @@ CharTexture CText::GetCharTexture(StrUtils::CodePoint ch, FontType font, float s
     else
     {
         tex = CreateCharTexture(ch, cf);
-        
+
         if (tex.id == 0) // Creation failed (e.g., atlas full and resize failed)
         {
             return CharTexture();
@@ -1310,7 +1310,8 @@ CharTexture CText::GetCharTexture(StrUtils::CodePoint ch, FontType font, float s
     return tex;
 }
 
-CharTexture CText::CreateCharTexture(StrUtils::CodePoint ch, CachedFont* font) {
+CharTexture CText::CreateCharTexture(StrUtils::CodePoint ch, CachedFont* font)
+{
     CharTexture texture;
 
     SDL_Surface* textSurface = nullptr;
@@ -1362,10 +1363,10 @@ FontTexture* CText::GetOrCreateFontTexture(const glm::ivec2& tileSize)
 {
     uint64_t key = PackTileSize(tileSize);
     auto it = m_fontTextureMap.find(key);
-    
+
     if (it != m_fontTextureMap.end())
     {
-        // Search backwards (newest atlases at back)
+        // Search forward; any atlas with free slots is acceptable
         for (auto& fontTexture : it->second)
         {
             if (fontTexture.freeSlots > 0)
@@ -1375,13 +1376,13 @@ FontTexture* CText::GetOrCreateFontTexture(const glm::ivec2& tileSize)
 
     GetLogger()->Debug("Creating NEW atlas for tile size %%x%% - no existing atlas with free slots found",
                       tileSize.x, tileSize.y);
-    
+
     FontTexture newFontTexture = CreateFontTexture(tileSize);
     if (newFontTexture.id == 0)
     {
         return nullptr;
     }
-    
+
     GetLogger()->Debug("New atlas created: ID=%%, size=%%x%%, slots=%%, tileSize=%%x%%",
                       newFontTexture.id,
                       newFontTexture.textureSize.x, newFontTexture.textureSize.y,
@@ -1395,7 +1396,7 @@ FontTexture* CText::GetOrCreateFontTexture(const glm::ivec2& tileSize)
 FontTexture CText::CreateFontTexture(const glm::ivec2& tileSize)
 {
     assert(tileSize.x > 0 && tileSize.y > 0);
-    
+
     // Calculate initial atlas size based on tile size
     // Target: at least SLOTS_PER_ROW^2 slots (16x16 = 256 slots minimum)
     constexpr int SLOTS_PER_ROW = 16;
@@ -1403,9 +1404,9 @@ FontTexture CText::CreateFontTexture(const glm::ivec2& tileSize)
     int initialSize = Math::NextPowerOfTwo(minSize);
     initialSize = std::max(initialSize, FONT_TEXTURE_BASE_SIZE);
     initialSize = std::min(initialSize, FONT_TEXTURE_MAX_SIZE);
-    
+
     glm::ivec2 atlasSize(initialSize, initialSize);
-    
+
     SDL_Surface* textureSurface = SDL_CreateRGBSurface(0, atlasSize.x, atlasSize.y, 32,
                                                        0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000);
     ImageData data;
@@ -1436,7 +1437,7 @@ glm::ivec2 CText::GetNextTilePos(const FontTexture& fontTexture)
     // Use per-atlas textureSize
     int horizontalTiles = fontTexture.textureSize.x / std::max(1, fontTexture.tileSize.x);
     int verticalTiles = fontTexture.textureSize.y / std::max(1, fontTexture.tileSize.y);
-    
+
     int totalTiles = horizontalTiles * verticalTiles;
     int tileNumber = totalTiles - fontTexture.freeSlots;
 

@@ -26,8 +26,7 @@
  * - Commit 90d37119e: Use dynamic font texture size
  */
 
-#include "graphics/engine/engine.h"
-#include "graphics/engine/text.h"
+#include "text_test_helpers.h"
 #include "app/app.h"
 #include "common/system/system.h"
 
@@ -38,23 +37,6 @@
 
 using namespace Gfx;
 using namespace HippoMocks;
-
-/**
- * \class CTextWrapper
- * \brief Wrapper exposing protected CText methods for testing
- */
-class CTextWrapper : public CText
-{
-public:
-    explicit CTextWrapper(CEngine* engine)
-        : CText(engine)
-    {}
-    
-    glm::ivec2 GetNextTilePosForTest(const FontTexture& ft)
-    {
-        return GetNextTilePos(ft);
-    }
-};
 
 /**
  * \class CTextHiDPIEdgeTest
@@ -144,9 +126,10 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_ZeroTextureSize_HandledGracefully)
 /**
  * \test GetNextTilePos_NegativeTileSize_HandledGracefully
  * \brief Tests that negative tile size doesn't crash
- * 
- * Edge case: Negative tile size should not cause crashes.
- * Note: The result may be negative due to the calculation, but should not crash.
+ *
+ * Edge case: negative tileSize is invalid input; CreateFontTexture asserts
+ * tileSize > 0, so this should never reach GetNextTilePos in production.
+ * Verify the guard (std::max(1, tileSize)) prevents a division-by-zero crash.
  */
 TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_NegativeTileSize_HandledGracefully)
 {
@@ -155,18 +138,11 @@ TEST_F(CTextHiDPIEdgeTest, GetNextTilePos_NegativeTileSize_HandledGracefully)
     ft.tileSize = {-64, -64};  // Invalid negative size
     ft.textureSize = {256, 256};
     ft.freeSlots = 0;
-    
-    // Should not crash - std::max(1, -64) = 1
-    auto result = m_text->GetNextTilePosForTest(ft);
-    
-    // Result may be negative due to calculation with negative input
-    // The important thing is it doesn't crash
-    // With std::max(1, -64) = 1: horizontalTiles = 256, verticalTiles = 256
-    // totalTiles = 256*256 = 65536, tileNumber = 65536 - 0 = 65536
-    // verticalTileIndex = 65536 / 256 = 256, horizontalTileIndex = 65536 % 256 = 0
-    // Position: (0 * -64, 256 * -64) = (0, -16384)
-    EXPECT_EQ(result.x, 0);
-    EXPECT_EQ(result.y, -16384);  // Negative result is expected with negative tileSize
+
+    // Should not crash - std::max(1, -64) = 1 prevents division by zero
+    // We only check for no-crash; the return value is undefined for invalid input.
+    (void)m_text->GetNextTilePosForTest(ft);
+    SUCCEED();
 }
 
 /**

@@ -26,8 +26,7 @@
  * - Per-atlas sizing logic in GetNextTilePos()
  */
 
-#include "graphics/engine/engine.h"
-#include "graphics/engine/text.h"
+#include "text_test_helpers.h"
 
 #include <gtest/gtest.h>
 #include <hippomocks.h>
@@ -36,28 +35,6 @@
 
 using namespace Gfx;
 using namespace HippoMocks;
-
-/**
- * \class CTextWrapper
- * \brief Wrapper exposing protected CText methods for testing
- */
-class CTextWrapper : public CText
-{
-public:
-    explicit CTextWrapper(CEngine* engine)
-        : CText(engine)
-    {}
-    
-    glm::ivec2 GetNextTilePosForTest(const FontTexture& ft)
-    {
-        return GetNextTilePos(ft);
-    }
-    
-    static uint64_t PackTileSizeForTest(const glm::ivec2& tileSize)
-    {
-        return PackTileSize(tileSize);
-    }
-};
 
 /**
  * \class CTextAtlasSizingTest

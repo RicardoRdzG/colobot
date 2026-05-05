@@ -345,7 +345,6 @@ public:
 
 ```bash
 # Build
-cd /home/rrodriguez/Documentos/GitHub/colobot
 cmake --build --preset Linux-CI-gcc -- -j$(nproc)
 
 # Test

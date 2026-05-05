@@ -1028,7 +1028,7 @@ protected:
     void        DrawMouse();
     //! Draw part of mouse cursor sprite
     void        DrawMouseSprite(const glm::ivec2& pos, const glm::ivec2& size, int icon, TransparencyMode mode);
-    
+
     //! Mouse scaling data for HiDPI displays
     struct MouseScaleData
     {
@@ -1037,14 +1037,14 @@ protected:
         glm::ivec2 scaledHotPoint;
         glm::ivec2 shadowOffset;
     };
-    
+
     //! Calculate mouse scaling for HiDPI displays (extracted for testability)
     MouseScaleData CalculateMouseScale(
         glm::ivec2 windowSize,
         glm::ivec2 baseMouseSize,
         glm::ivec2 hotPoint
     ) const;
-    
+
     //! Draw statistic texts
     void        DrawStats();
     //! Draw mission timer
