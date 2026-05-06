@@ -31,9 +31,9 @@ cd build && ctest --output-on-failure
 ./Colobot-UnitTests --gtest_output=xml:test-results.xml
 ```
 
-### Running with Spanish Translations
+### Running with Translations
 ```bash
-# Full Spanish (UI + help + levels)
+# Full translation (UI + help + levels) - replace 'es' with desired language
 export LANGUAGE=es
 ./build/colobot -datadir install/data --langdir install/lang
 
@@ -238,23 +238,23 @@ struct FontTexture { ... };
 
 ## Translation System
 
-### Spanish Translation Branches
-- **Main repo**: `merge-spanish-font-fix` - combines font fixes + Spanish data submodule
-- **Data submodule**: `dev-spanish-review` - all Spanish translation files (PO, MO, and compiled TXT)
-- **Progress tracker**: `data/SPANISH_TODO.md` - tracks manual review progress of 153 translation files
+### Translation Branches
+- **Main repo**: `merge-spanish-font-fix` - combines font fixes + translation data submodule
+- **Data submodule**: `dev-spanish-review` - all translation files (PO, MO, and compiled TXT)
+- **Progress tracker**: `data/SPANISH_TODO.md` - tracks manual review progress of translation files
 
-### Spanish Translation Workflow
+### Translation Workflow
 ```bash
 # 1. Work in data submodule
 cd data
 git checkout dev-spanish-review
 
 # 2. After editing PO files, compile and test
-for f in $(find . -name "es.po"); do msgfmt -o "$f.mo" "$f"; done
+for f in $(find . -name "*.po"); do msgfmt -o "${f%.po}.mo" "$f"; done
 
 # 3. Commit and push
 git add <reviewed_files>
-git commit -m "Add manually reviewed Spanish translation for <category>"
+git commit -m "Add manually reviewed <language> translation for <category>"
 git push origin dev-spanish-review
 
 # 4. Update main repo submodule ref
@@ -264,34 +264,40 @@ git commit -m "Update data submodule: <description>"
 git push origin merge-spanish-font-fix
 ```
 
-### Language Code Collision
-Spanish uses `Title.S` not `Title.E` because English (`en`) already uses `E`:
-- English: `help.E.txt`, `scene.E.txt`
-- Spanish: `help.S.txt`, `scene.S.txt`
-- Defined in `data/i18n-tools/scripts/common.py`
+### Language Codes
+Each language uses a specific letter code for help/level files:
+- English: `E` (help.E.txt, scene.E.txt)
+- German: `D`
+- French: `F`
+- Spanish: `S` (uses `S` not `E` to avoid collision)
+- Hungarian: `H`
+- Polish: `P`
+- Czech: `C`
+- Russian: `R`
+- Portuguese: `Pt`
 
-### Running with Spanish Translations
+### Running with Translations
 ```bash
-# Full Spanish (UI + help + levels)
+# Full translation (UI + help + levels) - replace 'es' with desired language
 export LANGUAGE=es
 ./build/colobot -datadir install/data --langdir install/lang
 
-# Help and levels only (PO files in data submodule)
+# Help and levels only (from data submodule, no UI)
 ./build/colobot -datadir data
 ```
 
 ### Key Locations
-- **Main UI**: `po/es.po` / `install/lang/es/LC_MESSAGES/colobot.mo`
-- **Help files**: `data/help/S/` (compiled TXT), `data/help/*/po/es.po` (PO source)
-- **Level files**: `data/levels/*/chapter00X/level00Y/help/help.S.txt`
-- **Level PO source**: `data/levels/*/po/es.po`
+- **Main UI**: `po/<lang>.po` / `install/lang/<lang>/LC_MESSAGES/colobot.mo`
+- **Help files**: `data/help/<letter>/` (compiled TXT), `data/help/*/po/<lang>.po` (PO source)
+- **Level files**: `data/levels/*/chapter00X/level00Y/help/help.<letter>.txt`
+- **Level PO source**: `data/levels/*/po/<lang>.po`
 
 ### Translation File Types
 | Type | Purpose | Location |
 |------|---------|----------|
-| `.po` | Source translation file (editable) | `data/*/po/es.po` |
-| `.mo` | Compiled binary for gettext | `install/lang/es/LC_MESSAGES/` |
-| `.txt` | Compiled help text for in-game help | `data/help/S/` |
+| `.po` | Source translation file (editable) | `data/*/po/<lang>.po` |
+| `.mo` | Compiled binary for gettext | `install/lang/<lang>/LC_MESSAGES/` |
+| `.txt` | Compiled help text for in-game help | `data/help/<letter>/` |
 
 ### Terminology Rules
 - **Use "bot"** (never "robot") - part of game lore (COLO-BOT)
@@ -305,48 +311,71 @@ export LANGUAGE=es
 #: ../help/help.E.txt:2
 #, no-wrap
 msgid "Objective"
-msgstr "Objetivo"
-```
-
-### Build and Test (with Spanish translations)
-```bash
-# Build
-cd /home/rrodriguez/Documentos/GitHub/colobot
-cmake --build --preset Linux-CI-gcc -- -j$(nproc)
-
-# Test translations (run game with Spanish UI + help + levels)
-export LANGUAGE=es
-./build/colobot -datadir install/data --langdir install/lang
-
-# Verify translations loaded:
-./build/colobot -datadir install/data --langdir install/lang -loglevel debug 2>&1 | grep -i "spanish\|locale\|lang"
+msgstr "Objectif"  # or "Objetivo" for Spanish, etc.
 ```
 
 ### Validation
 ```bash
 # Validate PO syntax
-msgfmt -c po/es.po
+msgfmt -c po/<lang>.po
 
 # Check empty translations
-grep -c '^msgstr ""$' po/es.po
+grep -c '^msgstr ""$' po/<lang>.po
 
 # Check all translation files exist
-find data -name "es.po" | wc -l   # Should be 145
-find data -name "es.mo" | wc -l    # Should be 144+
-ls install/data/help/S/             # Spanish help files
-ls install/lang/es/LC_MESSAGES/     # UI translation
+find data -name "<lang>.po" | wc -l
+find install/data/help/<letter>/ -name "*.txt" | wc -l
+ls install/lang/<lang>/LC_MESSAGES/
 ```
 
 ### Common Fixes
 ```bash
-# Fix energy cell terminology
-find . -name "es.po" -exec sed -i 's/células de energía/celdas de energía/g' {}
+# Compile all PO files to MO
+cd data && for f in $(find . -name "*.po"); do msgfmt -o "${f%.po}.mo" "$f"; done
 
-# Fix robots → bots in factory context
-grep -n '<a object|factory>robots' data/help/object/po/es.po
+# Fix terminology (example for Spanish)
+find . -name "*.po" -exec sed -i 's/células de energía/celdas de energía/g' {}
 
+# Find untranslated strings
+grep '^msgstr ""$' data/po/*.po | wc -l
+```
+
+### Build and Test (with Translations)
+```bash
+# Build
+cd /home/rrodriguez/Documentos/GitHub/colobot
+cmake --build --preset Linux-CI-gcc -- -j$(nproc)
+
+# Test translations (run game with UI + help + levels)
+export LANGUAGE=es
+./build/colobot -datadir install/data --langdir install/lang
+
+# Verify translations loaded:
+./build/colobot -datadir install/data --langdir install/lang -loglevel debug 2>&1 | grep -i "locale\|lang"
+```
+
+### Validation
+```bash
+# Validate PO syntax
+msgfmt -c po/<lang>.po
+
+# Check empty translations
+grep -c '^msgstr ""$' po/<lang>.po
+
+# Check all translation files exist
+find data -name "<lang>.po" | wc -l
+find data -name "<lang>.mo" | wc -l
+ls install/data/help/<letter>/             # Help files
+ls install/lang/<lang>/LC_MESSAGES/        # UI translation
+```
+
+### Common Fixes
+```bash
 # Compile PO to MO for testing
-cd data && for f in $(find . -name "es.po"); do msgfmt -o "$f.mo" "$f"; done
+cd data && for f in $(find . -name "<lang>.po"); do msgfmt -o "${f%.po}.mo" "$f"; done
+
+# Find untranslated strings
+grep '^msgstr ""$' data/po/<lang>.po | wc -l
 ```
 
 ## Font Texture System (Per-Atlas Sizing)
@@ -433,9 +462,9 @@ cd build
 # Install
 cmake --build --preset Linux-CI-gcc --target install
 
-# Execute
-cd build
-./colobot -datadir /tmp/colobot-install/share/games/colobot -loglevel debug
+# Execute with translations (replace 'es' with desired language)
+export LANGUAGE=es
+./colobot -datadir install/data --langdir install/lang -loglevel debug
 ```
 
 ### UV Coordinates (Texture Coordinates)
