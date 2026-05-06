@@ -31,6 +31,16 @@ cd build && ctest --output-on-failure
 ./Colobot-UnitTests --gtest_output=xml:test-results.xml
 ```
 
+### Running with Spanish Translations
+```bash
+# Full Spanish (UI + help + levels)
+export LANGUAGE=es
+./build/colobot -datadir install/data --langdir install/lang
+
+# Help and levels only (from data submodule, no UI)
+./build/colobot -datadir data
+```
+
 ### Code Quality Checks
 ```bash
 # Run linter (requires colobot-lint tool)
@@ -56,6 +66,9 @@ cmake --preset Linux-CI-gcc -DCOLOBOT_LINT_BUILD=ON
 - **vcpkg.json**: Dependencies specification
 - **CMakeLists.txt**: Main project configuration
 - **data/**: Game data (git submodule from colobot-data)
+- **po/**: Main UI translations (`.po` files, compiled to `.mo` at build time)
+- **install/data/**: Compiled game data (from build process)
+- **install/lang/**: Compiled UI translations (gettext `.mo` files)
 
 ## Build Options
 
@@ -225,11 +238,60 @@ struct FontTexture { ... };
 
 ## Translation System
 
+### Spanish Translation Branches
+- **Main repo**: `merge-spanish-font-fix` - combines font fixes + Spanish data submodule
+- **Data submodule**: `dev-spanish-review` - all Spanish translation files (PO, MO, and compiled TXT)
+- **Progress tracker**: `data/SPANISH_TODO.md` - tracks manual review progress of 153 translation files
+
+### Spanish Translation Workflow
+```bash
+# 1. Work in data submodule
+cd data
+git checkout dev-spanish-review
+
+# 2. After editing PO files, compile and test
+for f in $(find . -name "es.po"); do msgfmt -o "$f.mo" "$f"; done
+
+# 3. Commit and push
+git add <reviewed_files>
+git commit -m "Add manually reviewed Spanish translation for <category>"
+git push origin dev-spanish-review
+
+# 4. Update main repo submodule ref
+cd ..
+git add data
+git commit -m "Update data submodule: <description>"
+git push origin merge-spanish-font-fix
+```
+
 ### Language Code Collision
 Spanish uses `Title.S` not `Title.E` because English (`en`) already uses `E`:
 - English: `help.E.txt`, `scene.E.txt`
 - Spanish: `help.S.txt`, `scene.S.txt`
 - Defined in `data/i18n-tools/scripts/common.py`
+
+### Running with Spanish Translations
+```bash
+# Full Spanish (UI + help + levels)
+export LANGUAGE=es
+./build/colobot -datadir install/data --langdir install/lang
+
+# Help and levels only (PO files in data submodule)
+./build/colobot -datadir data
+```
+
+### Key Locations
+- **Main UI**: `po/es.po` / `install/lang/es/LC_MESSAGES/colobot.mo`
+- **Help files**: `data/help/S/` (compiled TXT), `data/help/*/po/es.po` (PO source)
+- **Level files**: `data/levels/*/chapter00X/level00Y/help/help.S.txt`
+- **Level PO source**: `data/levels/*/po/es.po`
+
+### Translation File Types
+| Type | Purpose | Location |
+|------|---------|----------|
+| `.po` | Source translation file (editable) | `data/*/po/es.po` |
+| `.mo` | Compiled binary for gettext | `install/lang/es/LC_MESSAGES/` |
+| `.txt` | Compiled help text for in-game help | `data/help/S/` |
 
 ### Terminology Rules
 - **Use "bot"** (never "robot") - part of game lore (COLO-BOT)
@@ -246,22 +308,33 @@ msgid "Objective"
 msgstr "Objetivo"
 ```
 
-### Key Locations
-- Main UI: `po/es.po` (659 strings)
-- Help files: `data/help/*/po/es.po`
-- Levels: `data/levels/*/chapter00X/level00Y/po/es.po`
-
-### Build and Test
+### Build and Test (with Spanish translations)
 ```bash
-cd build && make -j4
-cmake --install . --prefix /tmp/colobot-install
-LANGUAGE=es /tmp/colobot-install/games/colobot
+# Build
+cd /home/rrodriguez/Documentos/GitHub/colobot
+cmake --build --preset Linux-CI-gcc -- -j$(nproc)
+
+# Test translations (run game with Spanish UI + help + levels)
+export LANGUAGE=es
+./build/colobot -datadir install/data --langdir install/lang
+
+# Verify translations loaded:
+./build/colobot -datadir install/data --langdir install/lang -loglevel debug 2>&1 | grep -i "spanish\|locale\|lang"
 ```
 
 ### Validation
 ```bash
-msgfmt -c po/es.po                    # Validate syntax
-grep -c '^msgstr ""$' po/es.po        # Check empty translations
+# Validate PO syntax
+msgfmt -c po/es.po
+
+# Check empty translations
+grep -c '^msgstr ""$' po/es.po
+
+# Check all translation files exist
+find data -name "es.po" | wc -l   # Should be 145
+find data -name "es.mo" | wc -l    # Should be 144+
+ls install/data/help/S/             # Spanish help files
+ls install/lang/es/LC_MESSAGES/     # UI translation
 ```
 
 ### Common Fixes
@@ -271,6 +344,9 @@ find . -name "es.po" -exec sed -i 's/células de energía/celdas de energía/g' 
 
 # Fix robots → bots in factory context
 grep -n '<a object|factory>robots' data/help/object/po/es.po
+
+# Compile PO to MO for testing
+cd data && for f in $(find . -name "es.po"); do msgfmt -o "$f.mo" "$f"; done
 ```
 
 ## Font Texture System (Per-Atlas Sizing)
